@@ -1,0 +1,11 @@
+node_modules
+.next
+.open-next
+.wrangler
+.data
+.env*
+.dev.vars
+.git
+playwright-report
+test-results
+docs/verification/*.png

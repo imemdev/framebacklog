@@ -1,0 +1,7 @@
+{
+  "runtime": "http://localhost:8787",
+  "verifiedAfterProcessRestart": true,
+  "status": "In progress",
+  "progressSummary": "MCP wrote progress",
+  "taskId": "af24790b-2b30-4df5-b93b-44cf6a56e971"
+}

@@ -1,0 +1,11 @@
+{
+  "method": "workerd V8 CPU sampling through local Wrangler inspector, 1 ms sampling interval. Approximate non-idle sample time; not billed Cloudflare CPU, not production quota enforcement.",
+  "status": 200,
+  "wallMs": 218.627334,
+  "samples": 153,
+  "classifiedMs": {
+    "idle": 92.932,
+    "program": 1.244,
+    "javascript": 215.6389999999999
+  }
+}

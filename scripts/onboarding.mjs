@@ -1,0 +1,78 @@
+import { chromium, expect } from "@playwright/test";
+import { writeFile } from "node:fs/promises";
+const browser = await chromium.launch();
+const context = await browser.newContext();
+const page = await context.newPage();
+const errors = [];
+page.on("pageerror", (e) => errors.push(e.message));
+page.on("console", (m) => {
+  if (m.type() === "error") errors.push(m.text());
+});
+const base = process.env.TEST_URL || "http://localhost:3002";
+await page.goto(base);
+await page.getByLabel("Your name").fill("Onboarding Owner");
+await page.getByLabel("Email address").fill("onboarding-owner@example.test");
+await page
+  .getByLabel("Password", { exact: true })
+  .fill("onboarding-password-2026");
+await page
+  .getByLabel("Installation setup token")
+  .fill("onboarding-test-setup-token");
+await page.getByRole("button", { name: "Create owner account" }).click();
+await page
+  .getByRole("button", { name: "Create a project", exact: true })
+  .click();
+await page.getByLabel("Project name").fill("New installation");
+await page.getByLabel("Task ID prefix").fill("NEW");
+await page.getByRole("button", { name: "Create project", exact: true }).click();
+await expect(
+  page.getByRole("heading", { name: "Backlog", exact: false }),
+).toBeVisible();
+await page.getByRole("button", { name: "Settings", exact: true }).click();
+await page.getByRole("button", { name: "People", exact: true }).click();
+await page
+  .getByLabel("Partner’s email")
+  .fill("onboarding-partner@example.test");
+await page
+  .getByRole("button", { name: "Create invitation link", exact: true })
+  .click();
+const invitation = await page.getByLabel("Invitation link").inputValue();
+const partnerContext = await browser.newContext({
+  viewport: { width: 390, height: 844 },
+});
+const partner = await partnerContext.newPage();
+await partner.goto(invitation);
+await partner.getByLabel("Your name").fill("Onboarding Partner");
+await partner
+  .getByLabel("Email address")
+  .fill("onboarding-partner@example.test");
+await partner
+  .getByLabel("Password", { exact: true })
+  .fill("onboarding-partner-password-2026");
+await partner.getByRole("button", { name: "Join workspace" }).click();
+await expect(
+  partner.getByRole("heading", { name: "Backlog", exact: false }),
+).toBeVisible();
+await expect(
+  partner.getByRole("button", { name: "New task", exact: true }),
+).toHaveCount(0);
+await partner.getByRole("button", { name: "More", exact: true }).click();
+await expect(
+  partner.getByText("Managed by your workspace owner"),
+).toBeVisible();
+expect(errors).toEqual([]);
+const report = {
+  runtime: base,
+  ownerSetupUI: true,
+  projectCreationUI: true,
+  invitationCreationUI: true,
+  partnerJoinUI: true,
+  partnerPermissionState: true,
+  ownerPageAndConsoleErrors: errors,
+};
+await writeFile(
+  "docs/verification/onboarding.json",
+  JSON.stringify(report, null, 2),
+);
+console.log(report);
+await browser.close();

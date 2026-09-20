@@ -1,0 +1,30 @@
+[
+  {
+    "view": "backlog",
+    "violations": []
+  },
+  {
+    "view": "journey",
+    "violations": []
+  },
+  {
+    "view": "canvas",
+    "violations": []
+  },
+  {
+    "view": "mobile",
+    "violations": []
+  },
+  {
+    "view": "task-panel",
+    "violations": []
+  },
+  {
+    "view": "settings",
+    "violations": []
+  },
+  {
+    "view": "screen-review",
+    "violations": []
+  }
+]

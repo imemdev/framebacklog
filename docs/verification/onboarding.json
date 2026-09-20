@@ -1,0 +1,9 @@
+{
+  "runtime": "http://localhost:3002",
+  "ownerSetupUI": true,
+  "projectCreationUI": true,
+  "invitationCreationUI": true,
+  "partnerJoinUI": true,
+  "partnerPermissionState": true,
+  "ownerPageAndConsoleErrors": []
+}

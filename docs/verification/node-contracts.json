@@ -1,0 +1,89 @@
+{
+  "runtime": "http://localhost:3001",
+  "checks": [
+    "owner setup closes",
+    "single-use partner invitation",
+    "project-scoped AI credentials",
+    "progress persistence",
+    "idempotent creation and completion",
+    "concurrent edits conflict",
+    "completion evidence required",
+    "human-only task review",
+    "changes return to In progress",
+    "version-specific screen review",
+    "screen review conflicts",
+    "pinned comments and replies",
+    "comment task deduplication",
+    "canvas persistence",
+    "upload type validation",
+    "private images",
+    "project isolation",
+    "portable import/export",
+    "MCP stdio using REST",
+    "revocation",
+    "persistent task discussion",
+    "partner session revocation",
+    "CSRF origin rejection",
+    "bounded pagination",
+    "cursor resync response"
+  ],
+  "measurements": [
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/work-context",
+      "method": "GET",
+      "status": 200,
+      "bytes": 327,
+      "elapsedMs": 2.12
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/tasks",
+      "method": "POST",
+      "status": 201,
+      "bytes": 204,
+      "elapsedMs": 3.92
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/tasks/59371e76-20a7-444d-8e69-17e5b0a86305/progress",
+      "method": "PATCH",
+      "status": 200,
+      "bytes": 208,
+      "elapsedMs": 3.07
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/tasks/59371e76-20a7-444d-8e69-17e5b0a86305",
+      "method": "GET",
+      "status": 200,
+      "bytes": 542,
+      "elapsedMs": 1.79
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/tasks/59371e76-20a7-444d-8e69-17e5b0a86305/progress",
+      "method": "PATCH",
+      "status": 200,
+      "bytes": 208,
+      "elapsedMs": 1.63
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/tasks/59371e76-20a7-444d-8e69-17e5b0a86305/complete",
+      "method": "POST",
+      "status": 200,
+      "bytes": 201,
+      "elapsedMs": 2.38
+    },
+    {
+      "path": "projects/57ee1a0e-3108-4610-935d-e1f38aa0e532/changes?cursor=0",
+      "method": "GET",
+      "status": 200,
+      "bytes": 1220,
+      "elapsedMs": 1.64
+    }
+  ],
+  "workflowRequests": 7,
+  "totalResponseBytes": 2910,
+  "persistence": {
+    "projectId": "57ee1a0e-3108-4610-935d-e1f38aa0e532",
+    "taskId": "ff30c81f-e46e-4d34-a8dd-b916108a5e69",
+    "status": "In progress",
+    "progressSummary": "MCP wrote progress"
+  }
+}
