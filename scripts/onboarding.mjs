@@ -10,8 +10,7 @@ page.on("console", (m) => {
 });
 const base = process.env.TEST_URL || "http://localhost:3002";
 await page.goto(base);
-await page.getByLabel("Your name").fill("Onboarding Owner");
-await page.getByLabel("Email address").fill("onboarding-owner@example.test");
+await page.getByLabel("Username").fill("onboarding-owner");
 await page
   .getByLabel("Password", { exact: true })
   .fill("onboarding-password-2026");
@@ -30,11 +29,28 @@ await expect(
 ).toBeVisible();
 await page.getByRole("button", { name: "Settings", exact: true }).click();
 await page.getByRole("button", { name: "People", exact: true }).click();
+await page.getByRole("button", { name: "Create partner", exact: true }).click();
 await page
-  .getByLabel("Partner’s email")
-  .fill("onboarding-partner@example.test");
+  .getByLabel("Partner username", { exact: true })
+  .fill("onboarding-partner");
 await page
-  .getByRole("button", { name: "Create invitation link", exact: true })
+  .getByRole("checkbox", {
+    name: "Let the partner choose a password using an invitation",
+  })
+  .check();
+await page
+  .locator(".partner-project")
+  .first()
+  .getByRole("checkbox")
+  .first()
+  .check();
+await page
+  .locator(".partner-project")
+  .first()
+  .getByRole("button", { name: "Screen reviewer", exact: true })
+  .click();
+await page
+  .getByRole("button", { name: "Create invitation", exact: true })
   .click();
 const invitation = await page.getByLabel("Invitation link").inputValue();
 const partnerContext = await browser.newContext({
@@ -42,24 +58,23 @@ const partnerContext = await browser.newContext({
 });
 const partner = await partnerContext.newPage();
 await partner.goto(invitation);
-await partner.getByLabel("Your name").fill("Onboarding Partner");
-await partner
-  .getByLabel("Email address")
-  .fill("onboarding-partner@example.test");
+await partner.getByLabel("Username").fill("onboarding-partner");
 await partner
   .getByLabel("Password", { exact: true })
   .fill("onboarding-partner-password-2026");
 await partner.getByRole("button", { name: "Join workspace" }).click();
 await expect(
-  partner.getByRole("heading", { name: "Backlog", exact: false }),
+  partner.getByRole("heading", { name: "User journey", exact: false }),
 ).toBeVisible();
 await expect(
   partner.getByRole("button", { name: "New task", exact: true }),
 ).toHaveCount(0);
-await partner.getByRole("button", { name: "More", exact: true }).click();
 await expect(
-  partner.getByText("Managed by your workspace owner"),
-).toBeVisible();
+  partner.getByRole("button", { name: "More", exact: true }),
+).toHaveCount(0);
+await expect(
+  partner.getByRole("button", { name: "Reviews", exact: true }),
+).toHaveCount(0);
 expect(errors).toEqual([]);
 const report = {
   runtime: base,

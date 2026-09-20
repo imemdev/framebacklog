@@ -2,15 +2,13 @@ import { test, expect } from "@playwright/test";
 const phoneComment = `Phone review ${Date.now()}: explain who can see this project.`;
 async function login(page: import("@playwright/test").Page, partner = false) {
   await page.goto("/");
-  await page
-    .getByLabel("Email address")
-    .fill(partner ? "partner@demo.local" : "owner@demo.local");
+  await page.getByLabel("Username").fill(partner ? "partner" : "owner");
   await page
     .getByLabel("Password", { exact: true })
     .fill(process.env.DEMO_PASSWORD || "demo-local-password-2026");
   for (let attempt = 0; attempt < 3; attempt++) {
     const responsePromise = page.waitForResponse((r) =>
-      r.url().endsWith("/api/auth/sign-in/email"),
+      r.url().endsWith("/api/auth/sign-in/username"),
     );
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
     const response = await responsePromise;
@@ -26,7 +24,10 @@ async function login(page: import("@playwright/test").Page, partner = false) {
     );
   }
   await expect(
-    page.getByRole("heading", { name: "Backlog", exact: false }),
+    page.getByRole("heading", {
+      name: partner ? "User journey" : "Backlog",
+      exact: false,
+    }),
   ).toBeVisible();
 }
 test("desktop task: creation, progress, completion, human feedback, review, and context", async ({
@@ -285,9 +286,19 @@ test("settings: scoped credential, connection test, secret-free kit, and invitat
   await expect(page.getByLabel("New API secret")).toHaveCount(0);
   await page.getByRole("button", { name: "People", exact: true }).click();
   await page
-    .getByLabel("Partner’s email")
-    .fill(`browser-partner-${Date.now()}@example.test`);
-  await page.getByRole("button", { name: "Create invitation link" }).click();
+    .getByRole("button", { name: "Create partner", exact: true })
+    .click();
+  await page
+    .getByRole("checkbox", {
+      name: "Let the partner choose a password using an invitation",
+    })
+    .check();
+  await page
+    .getByLabel("Partner username", { exact: true })
+    .fill(`browser-partner-${Date.now()}`);
+  await page
+    .getByRole("button", { name: "Create invitation", exact: true })
+    .click();
   await expect(page.getByLabel("Invitation link")).toHaveValue(/invite=cb_/);
 });
 

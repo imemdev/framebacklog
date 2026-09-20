@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   newProject,
+  deleteTask,
+  recommendScreen,
+  screenVersions,
   createTask,
   taskInput,
   progress,
@@ -54,7 +57,7 @@ describe("Task workflow shared by UI, REST, and MCP", () => {
         decision: "approve",
         feedback: "",
       }),
-    ).toThrow("human owner");
+    ).toThrow("human");
     reviewTask(p, owner, t.id, {
       version: 2,
       decision: "approve",
@@ -134,7 +137,7 @@ describe("Task workflow shared by UI, REST, and MCP", () => {
         { ...owner, role: "partner" },
         taskInput.parse({ title: "No" }),
       ),
-    ).toThrow("owner");
+    ).toThrow("permission");
   });
   it("deduplicates explicitly linked feedback without resolving it", () => {
     const { p, ai } = make();
@@ -170,4 +173,65 @@ describe("Task workflow shared by UI, REST, and MCP", () => {
     expect(a.id).toBe(b.id);
     expect(p.comments[0].resolved).toBe(false);
   });
+});
+
+it("recommends a screen version without moving its history and rejects stale or AI decisions", () => {
+  const { p, ai } = make();
+  const partner: Actor = {
+    id: "partner",
+    name: "partner",
+    role: "partner",
+    permissions: [],
+  };
+  partner.projectAccess = { [p.id]: ["view-screens", "screen-review"] };
+  p.screens.push({
+    id: "screen",
+    title: "Welcome",
+    versions: [1, 2].map((number) => ({
+      id: `v${number}`,
+      number,
+      status: "Awaiting review",
+      createdAt: new Date().toISOString(),
+      reviews: [],
+    })),
+  });
+  recommendScreen(p, partner, "screen", "v1", 0);
+  expect(screenVersions(p.screens[0]).map((v) => v.id)).toEqual(["v1", "v2"]);
+  expect(p.screens[0].versions.map((v) => v.number)).toEqual([1, 2]);
+  expect(p.screens[0].versions[0].status).toBe("Awaiting review");
+  expect(() => recommendScreen(p, partner, "screen", "v2", 0)).toThrow();
+  expect(() => recommendScreen(p, ai, "screen", "v2", 1)).toThrow();
+  expect(() => recommendScreen(p, partner, "screen", "missing", 1)).toThrow();
+  expect(p.screens[0].recommendation?.versionId).toBe("v1");
+  recommendScreen(p, partner, "screen", "v2", 1);
+  expect(screenVersions(JSON.parse(JSON.stringify(p.screens[0])))[0].id).toBe(
+    "v2",
+  );
+});
+
+it("lets only owners delete any task status and removes dependency references atomically", () => {
+  for (const status of [
+    "To do",
+    "In progress",
+    "Done",
+    "Done reviewed",
+  ] as const) {
+    const { p, t, ai } = make();
+    t.status = status;
+    const dependent = createTask(
+      p,
+      owner,
+      taskInput.parse({ title: "Depends", dependencies: [t.id] }),
+    );
+    expect(() => deleteTask(p, ai, t.id, t.version)).toThrow();
+    expect(() =>
+      deleteTask(p, { ...owner, role: "partner" }, t.id, t.version),
+    ).toThrow();
+    expect(() => deleteTask(p, owner, t.id, t.version + 1)).toThrow();
+    deleteTask(p, owner, t.id, t.version);
+    expect(p.tasks.some((task) => task.id === t.id)).toBe(false);
+    expect(dependent.dependencies).toEqual([]);
+    expect(dependent.version).toBe(2);
+    expect(p.activity.at(-1)?.action).toBe("Task deleted");
+  }
 });

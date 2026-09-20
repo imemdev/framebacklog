@@ -1,7 +1,9 @@
 "use client";
+import { can } from "@/lib/access";
 import { useState } from "react";
 import {
   CheckCheck,
+  Trash2,
   CheckCircle2,
   ImageIcon,
   MessageSquare,
@@ -24,7 +26,8 @@ export default function TaskPanel({
   refresh: () => Promise<void>;
   openScreen: (id: string) => void;
 }) {
-  const [draft, setDraft] = useState(task),
+  const [confirmDelete, setConfirmDelete] = useState(false),
+    [draft, setDraft] = useState(task),
     [tab, setTab] = useState("details"),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
@@ -33,7 +36,7 @@ export default function TaskPanel({
     [comment, setComment] = useState(""),
     [summary, setSummary] = useState(""),
     [verification, setVerification] = useState("");
-  const owner = actor.role === "owner";
+  const owner = can(actor, project.id, "tasks");
   const editable = owner && ["To do", "In progress"].includes(task.status);
   async function run(action: () => Promise<unknown>) {
     setBusy(true);
@@ -66,8 +69,58 @@ export default function TaskPanel({
         <div className="task-title-row">
           <Status status={task.status} />
           <span className="muted">Version {task.version}</span>
+          {can(actor, project.id, "task-delete") && (
+            <button
+              className="delete-task-button"
+              disabled={busy}
+              onClick={() => setConfirmDelete(!confirmDelete)}
+            >
+              <Trash2 size={16} />
+              Delete task
+            </button>
+          )}
         </div>
         <h1 className="detail-title">{task.title}</h1>
+        {confirmDelete && (
+          <section
+            className="delete-task-confirm"
+            aria-label="Confirm task deletion"
+          >
+            <strong>Delete {task.readableId}?</strong>
+            <p>
+              This permanently removes the task and its task discussion. Screens
+              and screen comments stay. Other tasks will no longer depend on it.
+            </p>
+            <div className="form-actions">
+              <button
+                className="danger"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setError("");
+                  try {
+                    await write(
+                      progressPath,
+                      { version: task.version },
+                      "DELETE",
+                    );
+                    await refresh();
+                    onClose();
+                  } catch (error) {
+                    setError((error as Error).message);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete permanently
+              </button>
+              <button disabled={busy} onClick={() => setConfirmDelete(false)}>
+                Keep task
+              </button>
+            </div>
+          </section>
+        )}
         <div className="tabs">
           <button
             className={tab === "details" ? "selected" : ""}
@@ -436,61 +489,64 @@ export default function TaskPanel({
                 </button>
               </details>
             )}
-            {owner && ["Done", "Done reviewed"].includes(task.status) && (
-              <section className="review-actions">
-                <h3>
-                  {task.status === "Done"
-                    ? "Your review"
-                    : "Reopen reviewed work"}
-                </h3>
-                <Field
-                  label="Review feedback"
-                  hint="Required when requesting changes or reopening."
-                >
-                  <textarea
-                    value={feedback}
-                    onChange={(e) => setFeedback(e.target.value)}
-                    rows={3}
-                    placeholder="What should happen next?"
-                  />
-                </Field>
-                <div className="form-actions">
-                  {task.status === "Done" && (
+            {can(actor, project.id, "task-review") &&
+              ["Done", "Done reviewed"].includes(task.status) && (
+                <section className="review-actions">
+                  <h3>
+                    {task.status === "Done"
+                      ? "Your review"
+                      : "Reopen reviewed work"}
+                  </h3>
+                  <Field
+                    label="Review feedback"
+                    hint="Required when requesting changes or reopening."
+                  >
+                    <textarea
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                      rows={3}
+                      placeholder="What should happen next?"
+                    />
+                  </Field>
+                  <div className="form-actions">
+                    {task.status === "Done" && (
+                      <button
+                        className="primary"
+                        disabled={busy}
+                        onClick={() =>
+                          void run(() =>
+                            write(`${progressPath}/review`, {
+                              version: task.version,
+                              decision: "approve",
+                              feedback,
+                            }),
+                          )
+                        }
+                      >
+                        <CheckCheck size={17} />
+                        Mark done reviewed
+                      </button>
+                    )}
                     <button
-                      className="primary"
-                      disabled={busy}
+                      disabled={busy || !feedback.trim()}
                       onClick={() =>
                         void run(() =>
                           write(`${progressPath}/review`, {
                             version: task.version,
-                            decision: "approve",
+                            decision:
+                              task.status === "Done" ? "changes" : "reopen",
                             feedback,
                           }),
                         )
                       }
                     >
-                      <CheckCheck size={17} />
-                      Mark done reviewed
+                      {task.status === "Done"
+                        ? "Request changes"
+                        : "Reopen task"}
                     </button>
-                  )}
-                  <button
-                    disabled={busy || !feedback.trim()}
-                    onClick={() =>
-                      void run(() =>
-                        write(`${progressPath}/review`, {
-                          version: task.version,
-                          decision:
-                            task.status === "Done" ? "changes" : "reopen",
-                          feedback,
-                        }),
-                      )
-                    }
-                  >
-                    {task.status === "Done" ? "Request changes" : "Reopen task"}
-                  </button>
-                </div>
-              </section>
-            )}
+                  </div>
+                </section>
+              )}
             <section>
               <h3 className="section-title">Task discussion</h3>
               {(task.comments || []).map((c) => (
@@ -500,28 +556,32 @@ export default function TaskPanel({
                   <p>{c.text}</p>
                 </div>
               ))}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void run(async () => {
-                    await write(`${progressPath}/comments`, { text: comment });
-                    setComment("");
-                  });
-                }}
-              >
-                <Field label="Task comment">
-                  <textarea
-                    value={comment}
-                    onChange={(e) => setComment(e.target.value)}
-                    required
-                    maxLength={4000}
-                    rows={3}
-                  />
-                </Field>
-                <button disabled={busy || !comment.trim()}>
-                  Post task comment
-                </button>
-              </form>
+              {can(actor, project.id, "tasks") && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    void run(async () => {
+                      await write(`${progressPath}/comments`, {
+                        text: comment,
+                      });
+                      setComment("");
+                    });
+                  }}
+                >
+                  <Field label="Task comment">
+                    <textarea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      required
+                      maxLength={4000}
+                      rows={3}
+                    />
+                  </Field>
+                  <button disabled={busy || !comment.trim()}>
+                    Post task comment
+                  </button>
+                </form>
+              )}
             </section>
             {task.reviews.length > 0 && (
               <section>

@@ -3,7 +3,7 @@
 Implemented functionality is persistent and uses the same server rules for UI, REST and MCP. The following boundaries are intentional and visible:
 
 - One shared workspace. All human members see every project; there are no per-project human memberships. Service credentials are project-scoped.
-- Aggregate persistence is designed for small teams: 500 tasks/project; 100 screens/project; 20 versions/screen; 20 journeys; 100 nodes/300 edges per journey; 1,000 screen comments/project; 100 task comments/task; 1.5 MB metadata. A project at capacity must be exported/split. There is no deletion/archival UI yet.
+- Aggregate persistence is designed for small teams: 500 tasks/project; 100 screens/project; 20 versions/screen; 20 journeys; 100 nodes/300 edges per journey; 1,000 screen comments/project; 100 task comments/task; 1.5 MB metadata. A project at capacity must be exported/split. Owners can delete individual tasks in any status; bulk deletion, project deletion and archival are not included.
 - Latest 1,000 activity events and 24-hour idempotency receipts are retained. Task/screen review histories remain on their records. Large installations should migrate to normalized entity rows before raising limits.
 - Layout conflicts are project-wide at the commit boundary, with item versions for task/journey edits. Undo/redo is local to the open canvas session. Explicit Arrange uses a simple grid, not graph optimization. Zoom/minimap preferences are session-local.
 - Failed blob metadata saves can leave private orphaned uploads. They are never reachable through project routes. Automatic garbage collection is not implemented.

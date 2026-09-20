@@ -2,7 +2,7 @@
 
 ## People and projects
 
-The first owner creates the installation with the private setup token. Owners create projects and invite partners from Settings → People. Copy an invitation link manually; it expires in 24 hours and works once for the specified email. All human members share this installation's workspace and can view its projects. Partners review screens and discuss feedback; owners manage implementation and final task review. AI credentials are project-scoped and have individually selected permissions.
+Sign in with your username and password; no email address is required. The first owner chooses a username and password and creates the installation with the private setup token. Owners create projects and invite partners from Settings → People. Copy an invitation link manually; it expires in 24 hours and works once for the specified username. Only the owner sees every project. Partners see only assigned projects and can perform only their granted actions. AI credentials are project-scoped and have individually selected permissions.
 
 ## Tasks
 
@@ -35,3 +35,31 @@ An owner can choose Create task on a comment. The draft is prefilled, and the re
 Create an AI credential under Settings → AI access. Choose permissions, optionally set expiry, copy the secret once, test it and download the connection kit. Credentials show last use and can be revoked. Assistants work in their existing coding environment through REST or the local stdio MCP adapter.
 
 Project export/import includes screenshot bytes, relationships and history, excluding authentication secrets. Imports create new projects. This is different from a full installation backup, which also includes members and authentication data; administrators should follow the maintainer backup instructions.
+
+## Version stacks and recommendations
+
+Partners open directly to the journey canvas; the default reviewer preset shows User journey and Ideas. Additional sections appear only when the owner grants their viewing permissions. Settings stays owner-only. Screen comments, recommendations and decisions remain available inside a screen. The Screens toggle offers a list when preferred. Each screen remains one journey node and connection target. Multiple uploaded versions appear as a stack. Open the stack and browse thumbnails or use Previous/Next version; comments and pins apply only to the selected version. The green Recommend this screen action saves a shared preferred version and brings it to the front of both list and canvas stacks. Recommendations are separate from approval; historical version numbers and review decisions stay unchanged. The latest human recommendation wins, with stale simultaneous choices rejected for refresh/retry.
+
+## Pins, portrait screenshots, and deleting tasks
+
+Pinned comments show numbered badges matching the screenshot markers. Click a marker to focus its thread, or its Pin badge to return to the image. Numbers include resolved threads, so hiding them does not renumber other pins. General comments are labeled separately.
+
+Screenshot cards, canvas nodes and carousel thumbnails display the complete 9:16 portrait image without cropping or stretching. Other raster aspect ratios remain supported.
+
+Owners can open any task, including Done reviewed, and choose Delete task. Confirm Delete permanently or Keep task. Deletion removes the task and its task discussion, clears incoming dependency references, and records an activity event. Screens and their comments remain. This action cannot be undone.
+
+## Ideas and reusable tags
+
+Open Ideas from desktop or mobile navigation. Both owners and partners can add ideas to the selected project, with a title, optional details and up to 12 tags. Marketing, Mobile app UI and Features are starter choices. Save tag immediately stores a new tag for everyone in the project, even if the idea form is later cancelled. Tags are deduplicated without case sensitivity and remain after ideas are deleted. Search ideas or filter by a tag. Authors can edit/delete their own ideas; owners can manage all ideas. Ideas and tags are included in project export/import.
+
+## Partners and private projects
+
+As owner, open Settings → People → Create partner. Enter a username and initial password, or choose an invitation so the partner picks their own password. Select one or several projects, then choose permitted actions. All project actions, Screen reviewer and View only presets are available; each checkbox can be adjusted. Manage access changes or removes assignments later. Projects you have not selected are private to that partner; newly created projects are never shared automatically.
+
+Available grants: view backlog; create/edit tasks and move unfinished work/complete with evidence; delete tasks; human task review/reopening; view screenshots/journeys/discussions; comment/reply/resolve; recommend/approve/request screen changes; add screens/upload versions; edit journey layouts/connections; view ideas; add ideas/tags and manage own ideas; manage all ideas. Editing grants automatically include necessary viewing grants. Project creation, accounts, permissions, credentials, export/import and installation settings stay owner-only.
+
+For AI assistants use Settings → AI access for the selected project, rather than giving the assistant a human password. The stdio MCP adapter supports task creation, editing, progress, completion, comments and context retrieval. Give it the selected project's URL, ID and bearer token. AI credentials never grant human review or account administration.
+
+### Play through a journey
+
+Choose **Run journey** in User journey (Canvas or Screens). Playback shows each screen's recommended version, or newest version if none is recommended, for four seconds at 1× speed. Select 0.5×, 0.75×, 1×, or 1.25×; Pause/Resume and Restart are always nearby. At a branch, playback waits for you to choose a route by its label and destination screen, then continues automatically. Multiple starting screens prompt a choice. Repeated loops require an explicit choice and end screens stop playback. Closing the player stops its timer; hiding the browser tab pauses playback. Playback does not change saved layouts or review decisions, and uses the journey snapshot from when you opened it.

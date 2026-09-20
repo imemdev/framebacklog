@@ -2466,3 +2466,359 @@ textarea::placeholder {
 .review-status {
   font-size: 11px;
 }
+
+.version-stack {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  margin-top: 16px;
+}
+.version-stack::before,
+.version-stack::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid #c9d4e3;
+  border-radius: 10px;
+  background: #eef2f7;
+  inset: -8px 7px 8px;
+  z-index: -1;
+}
+.version-stack::before {
+  inset: -16px 14px 16px;
+  background: #e2e9f2;
+}
+.version-stack .screen-open,
+.version-stack .canvas-image {
+  border-radius: 9px 9px 0 0;
+  overflow: hidden;
+}
+.version-stack .screen-open,
+.version-stack .canvas-info,
+.version-stack .next-screens {
+  background: white;
+}
+.version-stack .next-screens {
+  border-radius: 0 0 10px 10px;
+}
+.version-carousel {
+  margin: 12px 0 20px;
+  padding: 14px;
+  background: #f5f7fa;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.carousel-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.carousel-controls > span {
+  font-size: 13px;
+}
+.recommend-button {
+  background: #187245;
+  border-color: #187245;
+  color: white;
+  margin-left: auto;
+}
+.recommend-button:hover {
+  background: #125b37;
+  color: white;
+}
+.recommend-button:disabled {
+  opacity: 1;
+  background: #e4f3e9;
+  color: #155b37;
+  border-color: #a4cdb3;
+}
+.version-filmstrip {
+  display: flex;
+  overflow-x: auto;
+  gap: 12px;
+  padding: 14px 2px 4px;
+  scroll-snap-type: x mandatory;
+}
+.version-filmstrip button {
+  flex: 0 0 130px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  scroll-snap-align: start;
+  font-size: 11px;
+}
+.version-filmstrip img {
+  width: 90px;
+  height: 160px;
+  object-fit: contain;
+  object-position: top;
+  border-radius: 5px;
+}
+.version-filmstrip button[aria-pressed="true"] {
+  outline: 2px solid #2563eb;
+  outline-offset: -1px;
+}
+.recommendation-note {
+  color: #155b37;
+  font-size: 12px;
+  margin: 12px 0 0;
+}
+@media (max-width: 600px) {
+  .recommend-button {
+    width: 100%;
+    margin-left: 0;
+  }
+  .version-carousel {
+    padding: 10px;
+  }
+}
+.comment-pin-label {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 5px 9px;
+  background: #eff5ff;
+  border-color: #bfd2f7;
+  color: #174ba8;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.comment-pin-label span {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #2563eb;
+  color: white;
+  font-weight: 700;
+}
+.general-comment-label {
+  margin-left: auto;
+  font-size: 11px;
+  color: #586579;
+}
+.comment.active-comment {
+  background: #eff5ff;
+  box-shadow: inset 3px 0 #2563eb;
+  padding-left: 12px;
+  padding-right: 8px;
+  border-radius: 6px;
+}
+.pin.active-pin {
+  outline: 3px solid #17212f;
+  outline-offset: 3px;
+}
+/* Preserve the full portrait screenshot, including its top and bottom. */
+.screen-thumb {
+  height: auto;
+  aspect-ratio: 9 / 16;
+  padding: 12px;
+  align-items: center;
+}
+.screen-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 5px;
+}
+.canvas-screen {
+  width: 180px;
+  height: 296px;
+}
+.canvas-image {
+  height: 192px;
+  padding: 8px;
+}
+.canvas-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  align-self: center;
+}
+.image-relative > img {
+  width: auto;
+  max-width: 100%;
+  max-height: 70dvh;
+  height: auto;
+  object-fit: contain;
+}
+.delete-task-button {
+  margin-left: auto;
+  color: #a32929;
+}
+.delete-task-confirm {
+  padding: 16px;
+  border: 1px solid #edc5c5;
+  background: #fff6f6;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+.delete-task-confirm p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+button.danger {
+  color: white;
+  background: #ac2828;
+  border-color: #ac2828;
+}
+
+.canvas-info {
+  height: 104px;
+  padding: 10px;
+}
+.canvas-info strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.ideas-toolbar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.idea-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 180px;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0 12px;
+}
+.idea-search input {
+  border: 0;
+  width: 100%;
+}
+.ideas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 18px;
+}
+.idea-card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 22px;
+}
+.idea-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.idea-card-heading > svg {
+  color: #8c6415;
+  flex-shrink: 0;
+}
+.idea-card-heading h2 {
+  font-size: 17px;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.idea-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  color: #586579;
+}
+.idea-card > small {
+  color: #586579;
+  display: block;
+  margin-top: 18px;
+}
+.idea-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.idea-tags button {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 12px;
+  border-radius: 18px;
+  min-height: 44px;
+  background: #f4f6fa;
+}
+.idea-tags button[aria-pressed="true"] {
+  background: #eaf1ff;
+  border-color: #8cb0f5;
+  color: #174ba8;
+}
+.idea-tag-picker {
+  border: 0;
+  padding: 0;
+  margin: 20px 0;
+  min-width: 0;
+}
+.idea-tag-picker legend {
+  font-weight: 600;
+}
+.idea-tag-picker .idea-tags button {
+  min-height: 44px;
+}
+.new-idea-tag {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.new-idea-tag input {
+  min-width: 0;
+  flex: 1;
+}
+@media (max-width: 600px) {
+  .ideas-toolbar > select {
+    width: 100%;
+  }
+  .idea-card {
+    padding: 16px;
+  }
+}
+.partner-project {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin: 14px 0;
+}
+.permission-options {
+  display: grid;
+  gap: 10px;
+  margin-top: 15px;
+}
+.permission-options .checkbox {
+  min-height: 32px;
+  align-items: flex-start;
+  font-size: 13px;
+}
+
+/* Journey playback keeps portrait screens readable on desktop and phones. */
+.player-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.player-controls label { display: flex; align-items: center; gap: 8px; }
+.player-controls select { width: auto; min-height: 44px; }
+.player-screen { text-align: center; }
+.player-screen img { display: block; width: auto; max-width: 100%; height: auto; max-height: 55dvh; object-fit: contain; margin: 12px auto; border: 1px solid var(--border); border-radius: 12px; }
+.player-placeholder { min-height: 220px; display: grid; place-content: center; justify-items: center; gap: 16px; background: #f7f8fa; border-radius: 12px; }
+.player-paths { display: grid; gap: 12px; }
+.player-paths button { justify-content: space-between; flex-wrap: wrap; text-align: left; min-height: 52px; }
+.player-paths strong { overflow-wrap: anywhere; }
+
+.public-guide { max-width: 850px; margin: 0 auto; padding: 32px 24px 80px; }
+.public-guide nav { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 48px; }
+.public-guide nav a { min-height: 44px; display: inline-flex; align-items: center; }
+.public-guide h1 { font-size: clamp(26px, 5vw, 38px); line-height: 1.2; }
+.public-guide header p, .public-guide section p { line-height: 1.75; }
+.public-guide section { margin-top: 32px; padding: 24px; background: white; border: 1px solid #e3e8ef; border-radius: 14px; }
+.public-guide h2 { font-size: 20px; margin-bottom: 14px; }
+.public-guide pre { overflow-x: auto; background: #f7f8fa; padding: 16px; border-radius: 8px; font-size: 12px; }
+.public-guide blockquote { margin: 12px 0; border-left: 3px solid #2563eb; padding-left: 18px; line-height: 1.7; }
+.public-guide a, .auth-form small a { color: #2457bd; text-decoration: underline; text-underline-offset: 3px; }
+.public-guide code, .public-guide p { overflow-wrap: anywhere; }
+@media (max-width: 500px) { .public-guide { padding: 20px 16px 48px; } .public-guide section { padding: 18px; } }

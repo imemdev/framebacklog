@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { username } from "better-auth/plugins";
 import { bindings, settings, sql } from "./storage";
 import { Problem, type Actor } from "./model";
 export async function auth() {
@@ -14,7 +15,14 @@ export async function auth() {
     database,
     baseURL: config.url,
     secret: config.secret,
-    emailAndPassword: { enabled: true, minPasswordLength: 12 },
+    emailAndPassword: { enabled: true, minPasswordLength: 3 },
+    plugins: [
+      username({
+        minUsernameLength: 3,
+        maxUsernameLength: 40,
+        usernameValidator: (value) => /^[a-zA-Z0-9_.-]+$/.test(value),
+      }),
+    ],
     trustedOrigins: [config.url],
     session: { expiresIn: 60 * 60 * 24 * 7, updateAge: 60 * 60 * 24 },
     rateLimit: { enabled: true, window: 60, max: 30 },
@@ -76,7 +84,15 @@ export async function actor(req: Request): Promise<Actor> {
     [session.user.id],
   );
   if (!m) throw new Problem(403, "This account is not a workspace member.");
+  const [access] =
+    m.role === "partner"
+      ? await sql<{ grants: string }>(
+          "SELECT grants FROM partner_access WHERE user_id=?",
+          [session.user.id],
+        )
+      : [];
   return {
+    projectAccess: access ? JSON.parse(access.grants) : {},
     id: session.user.id,
     name: session.user.name,
     role: m.role,

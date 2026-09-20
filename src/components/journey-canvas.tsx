@@ -1,7 +1,9 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
+  BaseEdge,
+  type EdgeProps,
   Background,
   Controls,
   MiniMap,
@@ -15,16 +17,20 @@ import {
   type EdgeChange,
   type Connection,
   type NodeProps,
+  type ReactFlowInstance,
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { routeConnection } from "@/lib/edge-routing";
 import { Undo2, Redo2, Network, Plus, ImageIcon, Trash2 } from "lucide-react";
-import type { Project, Journey } from "@/lib/model";
+import { screenVersions, type Project, type Journey } from "@/lib/model";
 import { write, Modal, Field, ErrorNotice } from "./ui";
 type ScreenData = {
   title: string;
   image?: string;
   version: number;
+  count: number;
+  recommended: boolean;
   status: string;
   comments: number;
   tasks: number;
@@ -34,7 +40,10 @@ function ScreenNode({ data }: { data: ScreenData }) {
   return (
     <>
       <Handle type="target" position={Position.Left} />
-      <button className="canvas-screen" onClick={data.open}>
+      <button
+        className={`canvas-screen ${data.count > 1 ? "version-stack" : ""}`}
+        onClick={data.open}
+      >
         <div className="canvas-image">
           {data.image ? (
             <img src={data.image} alt={data.title} />
@@ -44,7 +53,8 @@ function ScreenNode({ data }: { data: ScreenData }) {
         </div>
         <div className="canvas-info">
           <small>
-            VERSION {data.version} · {data.status}
+            VERSION {data.version} · {data.count} versions
+            {data.recommended ? " · Recommended" : ` · ${data.status}`}
           </small>
           <strong>{data.title}</strong>
           <span>
@@ -59,6 +69,30 @@ function ScreenNode({ data }: { data: ScreenData }) {
 const nodeTypes = {
   screen: ScreenNode as unknown as React.ComponentType<NodeProps>,
 };
+function RoutedEdge({ id, data, markerEnd, label, selected }: EdgeProps) {
+  const route = data?.route as ReturnType<typeof routeConnection> | undefined;
+  if (!route) return null;
+  return (
+    <BaseEdge
+      id={id}
+      path={route.path}
+      markerEnd={markerEnd}
+      interactionWidth={28}
+      style={{
+        stroke: selected ? "#2563eb" : "#586b86",
+        strokeWidth: selected ? 2.8 : 2,
+      }}
+      label={label}
+      labelX={route.label.x}
+      labelY={route.label.y}
+      labelStyle={{ fill: "#17212f", fontSize: 12, fontWeight: 500 }}
+      labelBgStyle={{ fill: "#ffffff", stroke: "#d9e1ec", strokeWidth: 1 }}
+      labelBgPadding={[10, 6]}
+      labelBgBorderRadius={6}
+    />
+  );
+}
+const edgeTypes = { routed: RoutedEdge };
 type Layout = Pick<Journey, "nodes" | "edges">;
 export default function JourneyCanvas({
   journey,
@@ -66,12 +100,14 @@ export default function JourneyCanvas({
   editable,
   refresh,
   openScreen,
+  createScreen,
 }: {
   journey: Journey;
   project: Project;
   editable: boolean;
   refresh: () => Promise<void>;
   openScreen: (id: string) => void;
+  createScreen?: (position: { x: number; y: number }) => void;
 }) {
   const [layout, setLayout] = useState<Layout>({
       nodes: journey.nodes,
@@ -86,6 +122,11 @@ export default function JourneyCanvas({
     [zoom, setZoom] = useState(100),
     [minimap, setMinimap] = useState(false),
     [selected, setSelected] = useState<string[]>([]);
+  const flow = useRef<ReactFlowInstance | null>(null);
+  const [createAt, setCreateAt] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [removeEdge, setRemoveEdge] = useState<string | null>(null);
   const baseline = useRef(layout);
   const saving = useRef(false);
   const [dirty, setDirty] = useState(false);
@@ -135,13 +176,13 @@ export default function JourneyCanvas({
   }
   const nodes: Node[] = layout.nodes.map((n) => {
     const s = project.screens.find((s) => s.id === n.screenId)!;
-    const v = s.versions.at(-1)!;
+    const v = screenVersions(s)[0];
     return {
       id: n.id,
       type: "screen",
-      width: 230,
-      height: 226,
-      measured: { width: 230, height: 226 },
+      width: 180,
+      height: 320,
+      measured: { width: 180, height: 320 },
       position: n.position,
       selected: selected.includes(n.id),
       data: {
@@ -150,6 +191,8 @@ export default function JourneyCanvas({
           ? `/api/v1/projects/${project.id}/files/${v.key}`
           : undefined,
         version: v.number,
+        count: s.versions.length,
+        recommended: s.recommendation?.versionId === v.id,
         status: v.status,
         comments: project.comments.filter(
           (c) => c.versionId === v.id && !c.resolved && !c.parentId,
@@ -159,11 +202,39 @@ export default function JourneyCanvas({
       },
     };
   });
-  const edges: Edge[] = layout.edges.map((e) => ({
-    ...e,
-    markerEnd: { type: MarkerType.ArrowClosed },
-    style: { stroke: "#8796ac", strokeWidth: 1.5 },
-  }));
+  const edges: Edge[] = useMemo(() => {
+    const boxes = layout.nodes.map((n) => ({
+      ...n.position,
+      width: 180,
+      height: 320,
+    }));
+    return layout.edges.map((e, index) => {
+      const source = layout.nodes.find((n) => n.id === e.source);
+      const target = layout.nodes.find((n) => n.id === e.target);
+      return {
+        ...e,
+        type: "routed",
+        ariaLabel: `Connection: ${e.label || "Continue"}`,
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "#586b86",
+          width: 20,
+          height: 20,
+        },
+        data: {
+          route:
+            source && target
+              ? routeConnection(
+                  { x: source.position.x + 180, y: source.position.y + 160 },
+                  { x: target.position.x, y: target.position.y + 160 },
+                  boxes,
+                  index,
+                )
+              : undefined,
+        },
+      };
+    });
+  }, [layout.nodes, layout.edges]);
   function nodeChanges(changes: NodeChange[]) {
     const changed = applyNodeChanges(changes, nodes);
     setSelected(changed.filter((n) => n.selected).map((n) => n.id));
@@ -250,7 +321,7 @@ export default function JourneyCanvas({
                   ...layout,
                   nodes: layout.nodes.map((n, i) => ({
                     ...n,
-                    position: { x: (i % 3) * 330, y: Math.floor(i / 3) * 320 },
+                    position: { x: (i % 3) * 330, y: Math.floor(i / 3) * 400 },
                   })),
                 })
               }
@@ -329,11 +400,50 @@ export default function JourneyCanvas({
           Save current layout
         </button>
       )}
-      <div className="canvas-wrap">
+      <div
+        className="canvas-wrap"
+        onDoubleClick={(e) => {
+          if (
+            !createScreen ||
+            saving.current ||
+            dirty ||
+            !(e.target as HTMLElement).classList.contains("react-flow__pane")
+          )
+            return;
+          const position = flow.current?.screenToFlowPosition({
+            x: e.clientX,
+            y: e.clientY,
+          });
+          if (position) createScreen(position);
+        }}
+      >
         <ReactFlow
+          onInit={(instance) => {
+            flow.current = instance;
+          }}
+          zoomOnDoubleClick={false}
+          onPaneContextMenu={(e) => {
+            if (!createScreen) return;
+            e.preventDefault();
+            if (saving.current || dirty) return;
+            const position = flow.current?.screenToFlowPosition({
+              x: e.clientX,
+              y: e.clientY,
+            });
+            if (position) setCreateAt(position);
+          }}
+          onEdgeClick={
+            editable
+              ? (e, edge) => {
+                  e.stopPropagation();
+                  setRemoveEdge(edge.id);
+                }
+              : undefined
+          }
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={editable ? nodeChanges : undefined}
           onEdgesChange={editable ? edgeChanges : undefined}
           onConnect={editable ? addConnection : undefined}
@@ -349,6 +459,7 @@ export default function JourneyCanvas({
           }}
           onMove={(_, viewport) => setZoom(Math.round(viewport.zoom * 100))}
           fitView
+          fitViewOptions={{ padding: 0.35 }}
           minZoom={0.2}
           maxZoom={2}
           deleteKeyCode={null}
@@ -358,7 +469,8 @@ export default function JourneyCanvas({
           {minimap && <MiniMap pannable zoomable />}
         </ReactFlow>
         <div className="canvas-hint">
-          Drag to arrange · Scroll to zoom · Shift + click to select
+          Drag to arrange · Scroll to zoom
+          {createScreen && " · Double-click empty space to add a screen"}
         </div>
       </div>
       {editable && layout.edges.length > 0 && (
@@ -401,18 +513,56 @@ export default function JourneyCanvas({
               />
               <button
                 aria-label={`Remove ${e.label} connection`}
-                onClick={() =>
-                  change({
-                    ...layout,
-                    edges: layout.edges.filter((edge) => edge.id !== e.id),
-                  })
-                }
+                onClick={() => setRemoveEdge(e.id)}
               >
                 <Trash2 size={16} />
               </button>
             </div>
           ))}
         </details>
+      )}
+      {createAt && createScreen && (
+        <Modal title="Canvas actions" onClose={() => setCreateAt(null)}>
+          <div className="panel-body">
+            <button
+              className="primary"
+              onClick={() => {
+                createScreen(createAt);
+                setCreateAt(null);
+              }}
+            >
+              <Plus size={16} />
+              Create screen here
+            </button>
+          </div>
+        </Modal>
+      )}
+      {removeEdge && editable && (
+        <Modal title="Delete connection?" onClose={() => setRemoveEdge(null)}>
+          <div className="panel-body">
+            <p>
+              Remove “
+              {layout.edges.find((e) => e.id === removeEdge)?.label ||
+                "Continue"}
+              ” from this journey? Both screens will stay in place. You can undo
+              this change.
+            </p>
+            <button
+              className="danger"
+              disabled={saving.current || dirty}
+              onClick={() => {
+                change({
+                  ...layout,
+                  edges: layout.edges.filter((e) => e.id !== removeEdge),
+                });
+                setRemoveEdge(null);
+              }}
+            >
+              Delete connection
+            </button>
+            <button onClick={() => setRemoveEdge(null)}>Keep connection</button>
+          </div>
+        </Modal>
       )}
       {connect && (
         <Modal title="Add a connection" onClose={() => setConnect(false)}>

@@ -124,6 +124,37 @@ server.registerTool(
     call(`tasks/${encodeURIComponent(id)}/progress`, "PATCH", data),
 );
 server.registerTool(
+  "update_task",
+  {
+    description:
+      "Edit task title, description, acceptance criteria, priority, assignee, dependencies and screen links, or move unfinished work between To do and In progress. Use complete_task for Done; human review is separate.",
+    inputSchema: {
+      id: taskId,
+      version,
+      title: z.string().min(1).max(200).optional(),
+      description: text.optional(),
+      acceptanceCriteria: text.optional(),
+      priority: z.enum(["Low", "Medium", "High", "Urgent"]).optional(),
+      assignee: z.string().max(100).optional(),
+      dependencies: z.array(z.string()).max(50).optional(),
+      screenIds: z.array(z.string()).max(30).optional(),
+      status: z.enum(["To do", "In progress"]).optional(),
+    },
+  },
+  ({ id, ...data }) =>
+    call(`tasks/${encodeURIComponent(id)}/progress`, "PATCH", data),
+);
+server.registerTool(
+  "add_task_comment",
+  {
+    description:
+      "Add a task discussion comment. Requires the comment permission.",
+    inputSchema: { id: taskId, text: z.string().min(1).max(4000) },
+  },
+  ({ id, text }) =>
+    call(`tasks/${encodeURIComponent(id)}/comments`, "POST", { text }),
+);
+server.registerTool(
   "complete_task",
   {
     description:

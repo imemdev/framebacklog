@@ -1,4 +1,5 @@
 "use client";
+import { can } from "@/lib/access";
 import { useEffect, useMemo, useState } from "react";
 import {
   Plus,
@@ -65,21 +66,26 @@ export default function Backlog({
   }
   const tasks = useMemo(
     () =>
-      project.tasks.filter(
-        (t) =>
-          (!query ||
-            `${t.title} ${t.readableId}`
-              .toLowerCase()
-              .includes(query.toLowerCase())) &&
-          (!status || t.status === status) &&
-          (!priority || t.priority === priority) &&
-          (!assignee || t.assignee === assignee) &&
-          (!screen || t.screenIds.includes(screen)) &&
-          (!blocked || t.blockerReason),
-      ),
+      project.tasks
+        .filter(
+          (t) =>
+            (!query ||
+              `${t.title} ${t.readableId}`
+                .toLowerCase()
+                .includes(query.toLowerCase())) &&
+            (!status || t.status === status) &&
+            (!priority || t.priority === priority) &&
+            (!assignee || t.assignee === assignee) &&
+            (!screen || t.screenIds.includes(screen)) &&
+            (!blocked || t.blockerReason),
+        )
+        .sort(
+          (a, b) =>
+            priorities.indexOf(b.priority) - priorities.indexOf(a.priority),
+        ),
     [project, query, status, priority, assignee, screen, blocked],
   );
-  const owner = actor.role === "owner";
+  const owner = can(actor, project.id, "tasks");
   async function drop(e: React.DragEvent, s: Task["status"]) {
     e.preventDefault();
     const task = project.tasks.find(

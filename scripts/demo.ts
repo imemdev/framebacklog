@@ -11,6 +11,7 @@ import {
   type Actor,
 } from "../src/lib/model";
 import { betterAuth } from "better-auth";
+import { username } from "better-auth/plugins";
 import { chromium } from "@playwright/test";
 if (!process.env.DATA_DIR?.includes("demo"))
   throw new Error(
@@ -25,6 +26,7 @@ if (db.prepare("SELECT id FROM installation").get())
   );
 const auth = betterAuth({
   database: db,
+  plugins: [username()],
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: "http://localhost:3000",
   emailAndPassword: { enabled: true, minPasswordLength: 12 },
@@ -32,6 +34,7 @@ const auth = betterAuth({
 const u = await auth.api.signUpEmail({
   body: {
     name: "Alex Morgan",
+    username: "owner",
     email: "owner@demo.local",
     password: process.env.DEMO_PASSWORD,
   },
@@ -39,6 +42,7 @@ const u = await auth.api.signUpEmail({
 const partner = await auth.api.signUpEmail({
   body: {
     name: "Jamie Chen",
+    username: "partner",
     email: "partner@demo.local",
     password: process.env.DEMO_PASSWORD,
   },
@@ -249,6 +253,12 @@ db.prepare("INSERT INTO projects(id,data) VALUES(?,?)").run(
   p.id,
   JSON.stringify(p),
 );
+db.prepare("INSERT INTO partner_access(user_id,grants) VALUES(?,?)").run(
+  partner.user.id,
+  JSON.stringify({
+    [p.id]: ["view-screens", "comment", "screen-review", "view-ideas", "ideas"],
+  }),
+);
 console.log(
-  `Demo ready: ${p.name}. Sign in as owner@demo.local or partner@demo.local using your DEMO_PASSWORD. No real workspace was modified.`,
+  `Demo ready: ${p.name}. Sign in as owner or partner using your DEMO_PASSWORD. No real workspace was modified.`,
 );

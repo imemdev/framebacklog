@@ -1,5 +1,5 @@
 {
-  "runtime": "http://localhost:3002",
+  "runtime": "http://localhost:3003",
   "ownerSetupUI": true,
   "projectCreationUI": true,
   "invitationCreationUI": true,

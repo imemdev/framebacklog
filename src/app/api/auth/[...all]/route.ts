@@ -6,6 +6,7 @@ async function handle(req: Request) {
     if (
       ![
         "/api/auth/sign-in/email",
+        "/api/auth/sign-in/username",
         "/api/auth/sign-out",
         "/api/auth/get-session",
       ].includes(path)

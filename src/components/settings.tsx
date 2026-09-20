@@ -1,4 +1,5 @@
 "use client";
+import Partners from "./partners";
 import { useEffect, useState } from "react";
 import {
   KeyRound,
@@ -39,7 +40,13 @@ export default function SettingsPage({
     [secret, setSecret] = useState(""),
     [invitation, setInvitation] = useState(""),
     [members, setMembers] = useState<
-      { id: string; name: string; email: string; role: string }[]
+      {
+        id: string;
+        name: string;
+        email: string;
+        username?: string;
+        role: string;
+      }[]
     >([]),
     [busy, setBusy] = useState(false);
   const owner = actor.role === "owner";
@@ -296,90 +303,7 @@ export default function SettingsPage({
           </section>
         </div>
       )}
-      {tab === "members" && (
-        <div className="settings-content">
-          <section className="settings-card">
-            <h2>People in this workspace</h2>
-            <p>
-              Workspace members can see all projects. Service credentials are
-              scoped to one project.
-            </p>
-            {members.map((m) => (
-              <div className="member" key={m.id}>
-                <span className="avatar">{m.name.slice(0, 2)}</span>
-                <div>
-                  <strong>{m.name}</strong>
-                  <small>{m.email}</small>
-                </div>
-                <span className="status">
-                  {m.role === "owner" ? "Owner" : "Partner / reviewer"}
-                </span>
-                {m.role === "partner" && (
-                  <button
-                    className="danger-quiet"
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        await api(`members/${m.id}`, { method: "DELETE" });
-                        await load();
-                        setNotice(
-                          "Partner access removed and sessions revoked.",
-                        );
-                      })
-                    }
-                  >
-                    Remove access
-                  </button>
-                )}
-              </div>
-            ))}
-          </section>
-          <section className="settings-card">
-            <h2>Invite a partner</h2>
-            <p>
-              Invitation links expire after 24 hours and can be used once. Send
-              the link yourself—no email service required.
-            </p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const f = new FormData(e.currentTarget);
-                void run(async () => {
-                  const r = await write<{ url: string }>("invitations", {
-                    email: f.get("email"),
-                  });
-                  setInvitation(r.url);
-                });
-              }}
-            >
-              <Field label="Partner’s email">
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  placeholder="partner@example.com"
-                />
-              </Field>
-              <button className="primary" disabled={busy}>
-                Create invitation link
-              </button>
-            </form>
-            {invitation && (
-              <div className="copy-field">
-                <input
-                  readOnly
-                  aria-label="Invitation link"
-                  value={invitation}
-                />
-                <button onClick={() => void copy(invitation)}>
-                  <Copy size={16} />
-                  Copy link
-                </button>
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+      {tab === "members" && <Partners />}
       {tab === "data" && (
         <div className="settings-content">
           <section className="settings-card">

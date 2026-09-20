@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: process.env.NEXT_PUBLIC_APP_NAME || "CustomBacklog",
+  title: process.env.NEXT_PUBLIC_APP_NAME || "FrameBacklog",
   description: "A shared workspace for building and reviewing software.",
 };
 export default function RootLayout({

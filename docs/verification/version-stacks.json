@@ -1,0 +1,13 @@
+{
+  "partnerCanvasLanding": true,
+  "noBacklogNavigation": true,
+  "backlogDeepLinkShowsCanvas": true,
+  "stackedCanvasAndList": true,
+  "recommendationPersists": true,
+  "versionSpecificComment": true,
+  "connectionsUnchanged": true,
+  "staleRecommendation409": true,
+  "desktopAndPhoneCarousel": true,
+  "noPhonePageOverflow": true,
+  "pageErrors": []
+}

@@ -1,3 +1,4 @@
+import { can } from "./access";
 import { z } from "zod";
 export const statuses = [
   "To do",
@@ -93,6 +94,7 @@ export type Actor = {
   name: string;
   role: "owner" | "partner" | "ai";
   projectId?: string;
+  projectAccess?: Record<string, string[]>;
   permissions: string[];
 };
 export type Review = {
@@ -126,7 +128,41 @@ export type ScreenVersion = {
   createdAt: string;
   reviews: Review[];
 };
-export type Screen = { id: string; title: string; versions: ScreenVersion[] };
+export type Screen = {
+  id: string;
+  title: string;
+  versions: ScreenVersion[];
+  recommendation?: { versionId: string; actor: string; at: string };
+  recommendationVersion?: number;
+};
+export function screenVersions(screen: Screen) {
+  const versions = screen.versions.toReversed();
+  const preferred = versions.find(
+    (v) => v.id === screen.recommendation?.versionId,
+  );
+  return preferred
+    ? [preferred, ...versions.filter((v) => v.id !== preferred.id)]
+    : versions;
+}
+export function recommendScreen(
+  p: Project,
+  a: Actor,
+  screenId: string,
+  versionId: string,
+  version: number,
+) {
+  authorize(a, p.id, "screen-review");
+  if (a.role === "ai")
+    throw new Problem(403, "Recommendations require a human reviewer.");
+  const screen = p.screens.find((s) => s.id === screenId);
+  if (!screen?.versions.some((v) => v.id === versionId))
+    throw new Problem(404, "Screen version not found.");
+  assertVersion(screen.recommendationVersion || 0, version);
+  screen.recommendation = { versionId, actor: a.name, at: now() };
+  screen.recommendationVersion = version + 1;
+  event(p, a, "Screen version recommended", screenId, versionId);
+  return { ok: true, version: screen.recommendationVersion };
+}
 export type Comment = z.infer<typeof commentInput> & {
   id: string;
   actor: string;
@@ -149,6 +185,8 @@ export type Activity = {
   detail: string;
 };
 export type Project = {
+  ideas?: import("./ideas").Idea[];
+  ideaTags?: string[];
   id: string;
   name: string;
   prefix: string;
@@ -205,11 +243,8 @@ export function authorize(
       403,
       "This credential does not have access to this project or operation.",
     );
-  if (
-    actor.role === "partner" &&
-    !["read", "comment", "screen-review"].includes(permission)
-  )
-    throw new Problem(403, "An owner is required for this action.");
+  if (actor.role === "partner" && !can(actor, projectId, permission))
+    throw new Problem(403, "You do not have this permission for this project.");
 }
 export function owner(actor: Actor) {
   if (actor.role !== "owner")
@@ -370,7 +405,8 @@ export function reviewTask(
   key: string,
   input: z.infer<typeof reviewInput>,
 ) {
-  owner(a);
+  if (a.role === "ai") throw new Problem(403, "Task review requires a human.");
+  authorize(a, p.id, "task-review");
   const t = findTask(p, key);
   assertVersion(t.version, input.version);
   if (input.decision !== "approve" && !input.feedback.trim())
@@ -400,4 +436,30 @@ export function reviewTask(
     input.feedback,
   );
   return t;
+}
+
+export function deleteTask(
+  p: Project,
+  a: Actor,
+  taskId: string,
+  version: number,
+) {
+  if (a.role === "ai")
+    throw new Problem(403, "Task deletion requires a human.");
+  authorize(a, p.id, "task-delete");
+  const task = findTask(p, taskId);
+  assertVersion(task.version, version);
+  p.tasks = p.tasks.filter((t) => t.id !== taskId);
+  for (const dependent of p.tasks) {
+    if (dependent.dependencies.includes(taskId)) {
+      dependent.dependencies = dependent.dependencies.filter(
+        (id) => id !== taskId,
+      );
+      dependent.version += 1;
+      dependent.updatedAt = now();
+      event(p, a, "Deleted dependency removed", dependent.id, task.readableId);
+    }
+  }
+  event(p, a, "Task deleted", taskId, `${task.readableId}: ${task.title}`);
+  return { deleted: true, id: taskId };
 }

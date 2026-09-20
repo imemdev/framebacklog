@@ -3,10 +3,10 @@ import { writeFile } from "node:fs/promises";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 await page.goto("http://localhost:3000");
-await page.getByLabel("Email address").fill("owner@demo.local");
+await page.getByLabel("Username").fill(process.env.TEST_USERNAME || "owner");
 await page
   .getByLabel("Password", { exact: true })
-  .fill("demo-local-password-2026");
+  .fill(process.env.TEST_PASSWORD || "demo-local-password-2026");
 await page.getByRole("button", { name: "Sign in", exact: true }).click();
 await page.getByRole("button", { name: "User journey", exact: true }).click();
 await page.getByRole("button", { name: "Canvas", exact: true }).click();

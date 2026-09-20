@@ -7,10 +7,10 @@ const context = await browser.newContext({
 });
 const page = await context.newPage();
 await page.goto("http://localhost:3000");
-await page.getByLabel("Email address").fill("owner@demo.local");
+await page.getByLabel("Username").fill(process.env.TEST_USERNAME || "owner");
 await page
   .getByLabel("Password", { exact: true })
-  .fill("demo-local-password-2026");
+  .fill(process.env.TEST_PASSWORD || "demo-local-password-2026");
 await page.getByRole("button", { name: "Sign in", exact: true }).click();
 await page.getByRole("heading", { name: "Backlog", exact: false }).waitFor();
 const reports = [];

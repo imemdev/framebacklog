@@ -1,4 +1,5 @@
 "use client";
+import { can } from "@/lib/access";
 import { useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -12,7 +13,12 @@ import {
   CheckCircle2,
   Maximize2,
 } from "lucide-react";
-import type { Actor, Project, Screen } from "@/lib/model";
+import {
+  screenVersions,
+  type Actor,
+  type Project,
+  type Screen,
+} from "@/lib/model";
 import { Modal, Field, ErrorNotice, api, write, stamp } from "./ui";
 import { CreateTask } from "./backlog";
 export default function ScreenPanel({
@@ -32,8 +38,9 @@ export default function ScreenPanel({
   openScreen: (id: string) => void;
   openTask: (id: string) => void;
 }) {
-  const [versionId, setVersionId] = useState(screen.versions.at(-1)!.id),
+  const [versionId, setVersionId] = useState(screenVersions(screen)[0].id),
     [pinMode, setPinMode] = useState(false),
+    [activePin, setActivePin] = useState(""),
     [pin, setPin] = useState<{ x: number; y: number }>(),
     [text, setText] = useState(""),
     [feedback, setFeedback] = useState(""),
@@ -47,9 +54,31 @@ export default function ScreenPanel({
   const input = useRef<HTMLTextAreaElement>(null);
   const v =
     screen.versions.find((v) => v.id === versionId) || screen.versions.at(-1)!;
+  const versions = screenVersions(screen);
+  const index = versions.findIndex((version) => version.id === v.id);
+  function selectVersion(id: string) {
+    setVersionId(id);
+    setActivePin("");
+    setPin(undefined);
+    setPinMode(false);
+    setReply("");
+    setText("");
+    setFeedback("");
+    setNotice("");
+  }
   const old = v.id !== screen.versions.at(-1)!.id;
-  const owner = actor.role === "owner";
+  const owner = can(actor, project.id, "tasks");
   const comments = project.comments.filter((c) => c.versionId === v.id);
+  // Number all pinned root threads in creation order, including hidden resolved ones.
+  const pinNumbers = new Map(
+    comments.filter((c) => c.pin && !c.parentId).map((c, i) => [c.id, i + 1]),
+  );
+  function revealPin(id: string, target: "pin" | "comment") {
+    setActivePin(id);
+    const element = document.getElementById(`${target}-${id}`);
+    element?.scrollIntoView({ behavior: "instant", block: "center" });
+    element?.focus({ preventScroll: true });
+  }
   const roots = comments.filter(
     (c) => !c.parentId && (showResolved || !c.resolved),
   );
@@ -85,14 +114,9 @@ export default function ScreenPanel({
           <select
             aria-label="Screen version"
             value={versionId}
-            onChange={(e) => {
-              setVersionId(e.target.value);
-              setPin(undefined);
-              setPinMode(false);
-              setReply("");
-            }}
+            onChange={(e) => selectVersion(e.target.value)}
           >
-            {screen.versions.toReversed().map((v) => (
+            {versions.map((v) => (
               <option key={v.id} value={v.id}>
                 Version {v.number}
                 {v.id === screen.versions.at(-1)!.id ? " · Latest" : ""}
@@ -108,7 +132,7 @@ export default function ScreenPanel({
             <Maximize2 size={16} />
             {focus ? "Split view" : "Focus preview"}
           </button>
-          {owner && (
+          {can(actor, project.id, "upload") && (
             <label className="button upload-button">
               <Upload size={16} />
               New version
@@ -142,6 +166,84 @@ export default function ScreenPanel({
             </label>
           )}
         </div>
+        <section className="version-carousel" aria-label="Screen versions">
+          <div className="carousel-controls">
+            <button
+              aria-label="Previous version"
+              disabled={index === 0 || busy}
+              onClick={() => selectVersion(versions[index - 1].id)}
+            >
+              <ArrowLeft size={18} />
+            </button>
+            <span aria-live="polite">
+              Version {v.number} · {index + 1} of {versions.length}
+            </span>
+            <button
+              aria-label="Next version"
+              disabled={index === versions.length - 1 || busy}
+              onClick={() => selectVersion(versions[index + 1].id)}
+            >
+              <ArrowRight size={18} />
+            </button>
+            <button
+              className="recommend-button"
+              disabled={
+                busy ||
+                !can(actor, project.id, "screen-review") ||
+                screen.recommendation?.versionId === v.id
+              }
+              onClick={() =>
+                void run(() =>
+                  write(
+                    `projects/${project.id}/screens/${screen.id}/recommend`,
+                    {
+                      versionId: v.id,
+                      version: screen.recommendationVersion || 0,
+                    },
+                  ),
+                )
+              }
+            >
+              <CheckCircle2 size={18} />
+              {screen.recommendation?.versionId === v.id
+                ? "Recommended screen"
+                : "Recommend this screen"}
+            </button>
+          </div>
+          {versions.length > 1 && (
+            <div className="version-filmstrip" aria-label="Choose a version">
+              {versions.map((version) => (
+                <button
+                  key={version.id}
+                  aria-label={`Preview version ${version.number}`}
+                  aria-pressed={version.id === v.id}
+                  onClick={() => selectVersion(version.id)}
+                >
+                  {version.key ? (
+                    <img
+                      alt=""
+                      src={`/api/v1/projects/${project.id}/files/${version.key}`}
+                    />
+                  ) : (
+                    <ImageIcon />
+                  )}
+                  <span>
+                    Version {version.number}
+                    {screen.recommendation?.versionId === version.id
+                      ? " · Recommended"
+                      : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          {screen.recommendation && (
+            <p className="recommendation-note">
+              Recommended by {screen.recommendation.actor}. Shown first in the
+              stack.
+            </p>
+          )}
+        </section>
         {old && (
           <div className="notice warning">
             You’re viewing an older version. Feedback and decisions stay with
@@ -157,7 +259,7 @@ export default function ScreenPanel({
                   : "Review the details at your own pace."}
               </span>
               <button
-                disabled={!v.key}
+                disabled={!v.key || !can(actor, project.id, "comment")}
                 className={pinMode ? "selected" : ""}
                 onClick={() => {
                   setPinMode(!pinMode);
@@ -200,10 +302,11 @@ export default function ScreenPanel({
                   />
                   {roots
                     .filter((c) => c.pin)
-                    .map((c, i) => (
+                    .map((c) => (
                       <button
-                        className="pin"
-                        aria-label={`View pinned comment: ${c.text}`}
+                        id={`pin-${c.id}`}
+                        className={`pin ${activePin === c.id ? "active-pin" : ""}`}
+                        aria-label={`View pin ${pinNumbers.get(c.id)}: ${c.text}`}
                         key={c.id}
                         style={{
                           left: `${c.pin!.x * 100}%`,
@@ -211,15 +314,10 @@ export default function ScreenPanel({
                         }}
                         onClick={(e) => {
                           e.stopPropagation();
-                          document
-                            .getElementById(`comment-${c.id}`)
-                            ?.scrollIntoView({
-                              behavior: "instant",
-                              block: "center",
-                            });
+                          revealPin(c.id, "comment");
                         }}
                       >
-                        {i + 1}
+                        {pinNumbers.get(c.id)}
                       </button>
                     ))}
                   {pin && (
@@ -312,63 +410,79 @@ export default function ScreenPanel({
             )}
             {roots.map((c) => (
               <article
-                className={`comment ${c.resolved ? "resolved" : ""}`}
+                className={`comment ${c.resolved ? "resolved" : ""} ${activePin === c.id ? "active-comment" : ""}`}
+                tabIndex={-1}
                 id={`comment-${c.id}`}
                 key={c.id}
               >
                 <div className="comment-author">
                   <span className="avatar small">{c.actor.slice(0, 2)}</span>
                   <strong>{c.actor}</strong>
-                  {c.pin && <MapPin size={13} />}
+                  {c.pin ? (
+                    <button
+                      className="comment-pin-label"
+                      aria-label={`Show pin ${pinNumbers.get(c.id)} on screen`}
+                      onClick={() => revealPin(c.id, "pin")}
+                    >
+                      <span>{pinNumbers.get(c.id)}</span> Pin{" "}
+                      {pinNumbers.get(c.id)}
+                    </button>
+                  ) : (
+                    <span className="general-comment-label">
+                      General comment
+                    </span>
+                  )}
                 </div>
                 <small>
                   {stamp(c.at)}
                   {c.resolved ? " · Resolved" : ""}
                 </small>
                 <p>{c.text}</p>
-                <div className="comment-actions">
-                  <button
-                    onClick={() => {
-                      setReply(c.id);
-                      input.current?.focus();
-                    }}
-                  >
-                    Reply
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      void run(() =>
-                        write(
-                          `projects/${project.id}/comments/${c.id}`,
-                          { resolved: !c.resolved },
-                          "PATCH",
-                        ),
-                      )
-                    }
-                  >
-                    {c.resolved ? "Reopen" : "Resolve"}
-                  </button>
-                  {owner &&
-                    (project.tasks.some((t) => t.sourceCommentId === c.id) ? (
-                      <button
-                        onClick={() =>
-                          openTask(
-                            project.tasks.find(
-                              (t) => t.sourceCommentId === c.id,
-                            )!.id,
-                          )
-                        }
-                      >
-                        View linked task
-                      </button>
-                    ) : (
-                      <button onClick={() => setCreateComment(c.id)}>
-                        <Plus size={13} />
-                        Create task
-                      </button>
-                    ))}
-                </div>
+                {can(actor, project.id, "comment") && (
+                  <div className="comment-actions">
+                    <button
+                      onClick={() => {
+                        setReply(c.id);
+                        input.current?.focus();
+                      }}
+                    >
+                      Reply
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        void run(() =>
+                          write(
+                            `projects/${project.id}/comments/${c.id}`,
+                            { resolved: !c.resolved },
+                            "PATCH",
+                          ),
+                        )
+                      }
+                    >
+                      {c.resolved ? "Reopen" : "Resolve"}
+                    </button>
+                    {owner &&
+                      (project.tasks.some((t) => t.sourceCommentId === c.id) ? (
+                        <button
+                          onClick={() =>
+                            openTask(
+                              project.tasks.find(
+                                (t) => t.sourceCommentId === c.id,
+                              )!.id,
+                            )
+                          }
+                        >
+                          View linked task
+                        </button>
+                      ) : (
+                        <button onClick={() => setCreateComment(c.id)}>
+                          <Plus size={13} />
+                          Create task
+                        </button>
+                      ))}
+                  </div>
+                )}
                 {comments
                   .filter((r) => r.parentId === c.id)
                   .map((r) => (
@@ -380,163 +494,171 @@ export default function ScreenPanel({
                   ))}
               </article>
             ))}
-            <form
-              className="comment-form"
-              onSubmit={(e) => {
-                e.preventDefault();
-                void run(async () => {
-                  await write(`projects/${project.id}/comments`, {
-                    screenId: screen.id,
-                    versionId: v.id,
-                    text,
-                    pin: reply ? undefined : pin,
-                    parentId: reply || undefined,
+            {can(actor, project.id, "comment") && (
+              <form
+                className="comment-form"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(async () => {
+                    await write(`projects/${project.id}/comments`, {
+                      screenId: screen.id,
+                      versionId: v.id,
+                      text,
+                      pin: reply ? undefined : pin,
+                      parentId: reply || undefined,
+                    });
+                    setText("");
+                    setPin(undefined);
+                    setReply("");
                   });
-                  setText("");
-                  setPin(undefined);
-                  setReply("");
-                });
-              }}
-            >
-              {(pin || reply) && (
-                <div className="notice">
-                  {reply ? "Replying to a thread" : "Pinned to this image"}
+                }}
+              >
+                {(pin || reply) && (
+                  <div className="notice">
+                    {reply ? "Replying to a thread" : "Pinned to this image"}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPin(undefined);
+                        setReply("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {pin && (
+                  <div className="field-row">
+                    <Field label="Pin horizontal (%)">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={Math.round(pin.x * 100)}
+                        onChange={(e) =>
+                          setPin({
+                            ...pin,
+                            x: Math.max(
+                              0,
+                              Math.min(1, Number(e.target.value) / 100),
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                    <Field label="Pin vertical (%)">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={Math.round(pin.y * 100)}
+                        onChange={(e) =>
+                          setPin({
+                            ...pin,
+                            y: Math.max(
+                              0,
+                              Math.min(1, Number(e.target.value) / 100),
+                            ),
+                          })
+                        }
+                      />
+                    </Field>
+                  </div>
+                )}
+                <Field label={reply ? "Your reply" : "Add a comment"}>
+                  <textarea
+                    ref={input}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    required
+                    rows={3}
+                    maxLength={4000}
+                    placeholder="What works well? What could be clearer?"
+                  />
+                </Field>
+                <button className="primary" disabled={busy || !text.trim()}>
+                  {reply ? "Post reply" : "Post comment"}
+                </button>
+              </form>
+            )}
+            {can(actor, project.id, "screen-review") && (
+              <section className="screen-decision">
+                <h3>Your review</h3>
+                <p className="muted">
+                  Your decision applies to version {v.number} only.
+                </p>
+                <Field
+                  label="Review note"
+                  hint="Required when requesting changes."
+                >
+                  <textarea
+                    value={feedback}
+                    onChange={(e) => setFeedback(e.target.value)}
+                    rows={2}
+                  />
+                </Field>
+                <div className="form-actions">
                   <button
-                    type="button"
-                    onClick={() => {
-                      setPin(undefined);
-                      setReply("");
-                    }}
+                    className="primary"
+                    disabled={busy}
+                    onClick={() =>
+                      void run(() =>
+                        write(
+                          `projects/${project.id}/screens/${screen.id}/review`,
+                          {
+                            versionId: v.id,
+                            reviewVersion: v.reviews.length,
+                            decision: "Approved",
+                            feedback,
+                          },
+                        ),
+                      )
+                    }
                   >
-                    Cancel
+                    <Check size={17} />
+                    Approve
+                  </button>
+                  <button
+                    disabled={busy || !feedback.trim()}
+                    onClick={() =>
+                      void run(() =>
+                        write(
+                          `projects/${project.id}/screens/${screen.id}/review`,
+                          {
+                            versionId: v.id,
+                            reviewVersion: v.reviews.length,
+                            decision: "Changes requested",
+                            feedback,
+                          },
+                        ),
+                      )
+                    }
+                  >
+                    Request changes
                   </button>
                 </div>
-              )}
-              {pin && (
-                <div className="field-row">
-                  <Field label="Pin horizontal (%)">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={Math.round(pin.x * 100)}
-                      onChange={(e) =>
-                        setPin({
-                          ...pin,
-                          x: Math.max(
-                            0,
-                            Math.min(1, Number(e.target.value) / 100),
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field label="Pin vertical (%)">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      value={Math.round(pin.y * 100)}
-                      onChange={(e) =>
-                        setPin({
-                          ...pin,
-                          y: Math.max(
-                            0,
-                            Math.min(1, Number(e.target.value) / 100),
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                </div>
-              )}
-              <Field label={reply ? "Your reply" : "Add a comment"}>
-                <textarea
-                  ref={input}
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  required
-                  rows={3}
-                  maxLength={4000}
-                  placeholder="What works well? What could be clearer?"
-                />
-              </Field>
-              <button className="primary" disabled={busy || !text.trim()}>
-                {reply ? "Post reply" : "Post comment"}
-              </button>
-            </form>
-            <section className="screen-decision">
-              <h3>Your review</h3>
-              <p className="muted">
-                Your decision applies to version {v.number} only.
-              </p>
-              <Field
-                label="Review note"
-                hint="Required when requesting changes."
-              >
-                <textarea
-                  value={feedback}
-                  onChange={(e) => setFeedback(e.target.value)}
-                  rows={2}
-                />
-              </Field>
-              <div className="form-actions">
-                <button
-                  className="primary"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(() =>
-                      write(
-                        `projects/${project.id}/screens/${screen.id}/review`,
-                        {
-                          versionId: v.id,
-                          reviewVersion: v.reviews.length,
-                          decision: "Approved",
-                          feedback,
-                        },
-                      ),
-                    )
-                  }
-                >
-                  <Check size={17} />
-                  Approve
-                </button>
-                <button
-                  disabled={busy || !feedback.trim()}
-                  onClick={() =>
-                    void run(() =>
-                      write(
-                        `projects/${project.id}/screens/${screen.id}/review`,
-                        {
-                          versionId: v.id,
-                          reviewVersion: v.reviews.length,
-                          decision: "Changes requested",
-                          feedback,
-                        },
-                      ),
-                    )
-                  }
-                >
-                  Request changes
-                </button>
-              </div>
-            </section>
-            <section>
-              <h3>
-                Linked tasks <span className="count">{linked.length}</span>
-              </h3>
-              {linked.map((t) => (
-                <button
-                  className="linked-item"
-                  key={t.id}
-                  onClick={() => openTask(t.id)}
-                >
-                  <CheckCircle2 size={15} />
-                  {t.readableId} · {t.title}
-                </button>
-              ))}
-              {!linked.length && <p className="muted">No tasks linked yet.</p>}
-            </section>
+              </section>
+            )}
+            {can(actor, project.id, "view-backlog") && (
+              <section>
+                <h3>
+                  Linked tasks <span className="count">{linked.length}</span>
+                </h3>
+                {linked.map((t) => (
+                  <button
+                    className="linked-item"
+                    key={t.id}
+                    onClick={() => openTask(t.id)}
+                  >
+                    <CheckCircle2 size={15} />
+                    {t.readableId} · {t.title}
+                  </button>
+                ))}
+                {!linked.length && (
+                  <p className="muted">No tasks linked yet.</p>
+                )}
+              </section>
+            )}
             <details>
               <summary>Review history & activity</summary>
               {v.reviews.map((r, i) => (

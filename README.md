@@ -1,14 +1,20 @@
-# CustomBacklog
+# FrameBacklog
 
 A small, open-source workspace for developers, nontechnical reviewers, and external coding assistants. Persistent task planning, a visual screen journey, versioned screen feedback, and human review—all without an embedded chatbot or LLM subscription.
 
 **Initial release:** working Node/SQLite and locally verified Cloudflare Workers/D1/R2 application. Cloudflare live deployment and Docker container execution are not verified in this environment. See [verification](docs/VERIFICATION.md) and [limitations](docs/LIMITATIONS.md).
+
+Previously named CustomBacklog. The visible name is configurable with `NEXT_PUBLIC_APP_NAME`; existing `CUSTOMBACKLOG_*` integration variables and storage identifiers remain supported.
+
+Public in-app connection guide: `/guide` (also linked beside sign-in).
 
 ## Start locally
 
 Use Node 24.15+ (Node 26.8.2 used for local verification) and pnpm 11.19.0.
 
 ```sh
+git clone https://github.com/imemdev/framebacklog.git
+cd framebacklog
 corepack enable
 pnpm install --frozen-lockfile
 cp .env.example .env.local
@@ -21,7 +27,7 @@ pnpm db:migrate
 pnpm dev
 ```
 
-Open http://localhost:3000. Create the owner using your installation setup token. Setup closes after the first owner. Create a project; invite a partner under **Settings → People**. A partner can see all projects in this single workspace; AI tokens see only their assigned project.
+Open http://localhost:3000. Create the owner using your installation setup token. Setup closes after the first owner. Create a project; invite a partner under **Settings → People**. Partners see only projects explicitly assigned by the owner, with individually selected actions. AI tokens see only their assigned project.
 
 For a production Node run, set the environment variables and use `pnpm build && pnpm start` (the start script prepares and launches the standalone output). The equivalent manual procedure is:
 
@@ -45,7 +51,7 @@ BETTER_AUTH_SECRET='<your-random-demo-session-secret>' pnpm demo
 DATA_DIR=.data/demo BETTER_AUTH_SECRET='<same-demo-session-secret>' pnpm dev
 ```
 
-Sign in as `owner@demo.local` or `partner@demo.local` using your chosen demo password. Never seed demo data into a real workspace.
+Sign in as `owner` or `partner` using your chosen demo password. Never seed demo data into a real workspace.
 
 ## Use an external assistant
 

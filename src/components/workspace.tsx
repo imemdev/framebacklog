@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   Layers3,
+  Lightbulb,
   LayoutGrid,
   Route,
   CheckCheck,
@@ -17,6 +18,8 @@ import {
 import type { Actor, Project } from "@/lib/model";
 import { api, write, Field, Modal, ErrorNotice, Empty } from "./ui";
 import Backlog from "./backlog";
+import { can } from "@/lib/access";
+import Ideas from "./ideas";
 import TaskPanel from "./task-panel";
 import SettingsPage from "./settings";
 const JourneyPage = dynamic(() => import("./journey"), {
@@ -28,7 +31,7 @@ const JourneyPage = dynamic(() => import("./journey"), {
   ),
 });
 const ScreenPanel = dynamic(() => import("./screen-panel"));
-const brand = process.env.NEXT_PUBLIC_APP_NAME || "CustomBacklog";
+const brand = process.env.NEXT_PUBLIC_APP_NAME || "FrameBacklog";
 type ProjectOption = { id: string; name: string; prefix: string };
 export default function Workspace() {
   const [user, setUser] = useState<Actor | null>(null),
@@ -46,7 +49,7 @@ export default function Workspace() {
     [reviewTab, setReviewTab] = useState("tasks");
   const syncUrl = useCallback(() => {
     const q = new URLSearchParams(location.search);
-    setPage(q.get("page") || "backlog");
+    setPage(q.get("page") || "");
     setTask(q.get("task") || "");
     setScreen(q.get("screen") || "");
     if (q.get("project")) setProjectId(q.get("project")!);
@@ -109,6 +112,7 @@ export default function Workspace() {
         setProject(p);
       } catch (e) {
         setError((e as Error).message);
+        if ((e as { status?: number }).status === 403) setProject(null);
         if ((e as { status?: number }).status === 401) {
           setUser(null);
           setProject(null);
@@ -124,7 +128,10 @@ export default function Workspace() {
   }, [refresh]);
   useEffect(() => {
     const focus = () => {
-      if (!document.hidden) void refresh();
+      if (!document.hidden) {
+        void initialize();
+        void refresh();
+      }
     };
     window.addEventListener("focus", focus);
     const timer = setInterval(focus, 60000);
@@ -132,7 +139,7 @@ export default function Workspace() {
       window.removeEventListener("focus", focus);
       clearInterval(timer);
     };
-  }, [refresh]);
+  }, [refresh, initialize]);
   if (boot)
     return (
       <div className="loading full">
@@ -141,13 +148,28 @@ export default function Workspace() {
       </div>
     );
   if (!user) return <Auth setup={setup} error={error} reload={initialize} />;
+  const owner = user.role === "owner";
+  const partnerPages = [
+    ...(can(user, projectId, "view-screens") ? ["journey"] : []),
+    ...(can(user, projectId, "view-backlog") ? ["backlog"] : []),
+    ...(can(user, projectId, "view-ideas") ? ["ideas"] : []),
+    ...(can(user, projectId, "task-review") ? ["reviews"] : []),
+  ];
+  const activePage = owner
+    ? page || "backlog"
+    : partnerPages.includes(page)
+      ? page
+      : partnerPages[0] || "journey";
+  const activeReviewTab = can(user, projectId, "task-review")
+    ? reviewTab
+    : "screens";
   const nav = [
     { id: "backlog", label: "Backlog", icon: LayoutGrid },
     { id: "journey", label: "User journey", icon: Route },
+    { id: "ideas", label: "Ideas", icon: Lightbulb },
     { id: "reviews", label: "Reviews", icon: CheckCheck },
     { id: "settings", label: "Settings", icon: Settings },
-  ];
-  const owner = user.role === "owner";
+  ].filter((item) => owner || partnerPages.includes(item.id));
   const reviewCount =
     project?.tasks.filter((t) => t.status === "Done").length || 0;
   return (
@@ -199,12 +221,12 @@ export default function Workspace() {
           {nav.map((n) => (
             <button
               key={n.id}
-              className={`nav-item ${page === n.id ? "active" : ""}`}
+              className={`nav-item ${activePage === n.id ? "active" : ""}`}
               onClick={() => navigate({ page: n.id, task: "", screen: "" })}
             >
               <n.icon size={19} />
               {n.label}
-              {n.id === "reviews" && reviewCount > 0 && (
+              {owner && n.id === "reviews" && reviewCount > 0 && (
                 <span className="count">{reviewCount}</span>
               )}
             </button>
@@ -220,7 +242,7 @@ export default function Workspace() {
           <div className="avatar">{user.name.slice(0, 2).toUpperCase()}</div>
           <div>
             <strong>{user.name}</strong>
-            <small>{owner ? "Owner · Developer" : "Partner · Reviewer"}</small>
+            <small>{owner ? "Owner · Developer" : "Partner"}</small>
           </div>
           <button
             className="icon-button"
@@ -243,7 +265,7 @@ export default function Workspace() {
             <span>{project?.name || "Workspace"}</span>
             <ChevronRight size={14} />
             <strong>
-              {nav.find((n) => n.id === page)?.label || "Backlog"}
+              {nav.find((n) => n.id === activePage)?.label || "User journey"}
             </strong>
           </div>
           <span className="workspace-tag">Shared workspace</span>
@@ -284,7 +306,9 @@ export default function Workspace() {
           )}
           {!projectId ? (
             <Empty
-              title="A clear place to start"
+              title={
+                owner ? "A clear place to start" : "No projects assigned yet"
+              }
               action={
                 owner && (
                   <button
@@ -297,8 +321,9 @@ export default function Workspace() {
                 )
               }
             >
-              Create your first project to bring tasks, screens, and feedback
-              together.
+              {owner
+                ? "Create your first project to bring tasks, screens, and feedback together."
+                : "Ask the owner to give you access to a project."}
             </Empty>
           ) : !project ? (
             <div className="loading">
@@ -307,7 +332,7 @@ export default function Workspace() {
             </div>
           ) : (
             <>
-              {page === "backlog" && (
+              {activePage === "backlog" && (
                 <Backlog
                   project={project}
                   actor={user}
@@ -317,7 +342,7 @@ export default function Workspace() {
                   refresh={refresh}
                 />
               )}
-              {page === "journey" && (
+              {activePage === "journey" && (
                 <JourneyPage
                   project={project}
                   actor={user}
@@ -325,7 +350,7 @@ export default function Workspace() {
                   openScreen={(id) => navigate({ screen: id })}
                 />
               )}
-              {page === "reviews" && (
+              {activePage === "reviews" && (
                 <>
                   <div className="page-heading">
                     <div className="eyebrow">CLOSE THE LOOP</div>
@@ -336,15 +361,21 @@ export default function Workspace() {
                     </p>
                   </div>
                   <div className="tabs">
+                    {can(user, projectId, "task-review") && (
+                      <button
+                        className={
+                          activeReviewTab === "tasks" ? "selected" : ""
+                        }
+                        onClick={() => setReviewTab("tasks")}
+                      >
+                        Completed tasks{" "}
+                        <span className="count">{reviewCount}</span>
+                      </button>
+                    )}
                     <button
-                      className={reviewTab === "tasks" ? "selected" : ""}
-                      onClick={() => setReviewTab("tasks")}
-                    >
-                      Completed tasks{" "}
-                      <span className="count">{reviewCount}</span>
-                    </button>
-                    <button
-                      className={reviewTab === "screens" ? "selected" : ""}
+                      className={
+                        activeReviewTab === "screens" ? "selected" : ""
+                      }
                       onClick={() => setReviewTab("screens")}
                     >
                       Screen reviews{" "}
@@ -358,7 +389,7 @@ export default function Workspace() {
                       </span>
                     </button>
                   </div>
-                  {reviewTab === "tasks" ? (
+                  {activeReviewTab === "tasks" ? (
                     <div className="review-grid">
                       {project.tasks
                         .filter((t) => t.status === "Done")
@@ -434,7 +465,15 @@ export default function Workspace() {
                   )}
                 </>
               )}
-              {page === "settings" && (
+              {activePage === "ideas" && (
+                <Ideas
+                  key={project.id}
+                  project={project}
+                  actor={user}
+                  refresh={refresh}
+                />
+              )}
+              {activePage === "settings" && (
                 <SettingsPage
                   actor={user}
                   project={project}
@@ -449,7 +488,7 @@ export default function Workspace() {
         {nav.map((n) => (
           <button
             key={n.id}
-            className={page === n.id ? "active" : ""}
+            className={activePage === n.id ? "active" : ""}
             onClick={() => navigate({ page: n.id, task: "", screen: "" })}
           >
             <n.icon size={21} />
@@ -474,7 +513,8 @@ export default function Workspace() {
           }}
         />
       )}
-      {project &&
+      {can(user, projectId, "view-backlog") &&
+        project &&
         selectedTask &&
         project.tasks.some((t) => t.id === selectedTask) && (
           <TaskPanel
@@ -583,13 +623,13 @@ function Auth({
             try {
               if (setup || invite)
                 await write(setup ? "setup" : "join", {
-                  name: f.get("name"),
-                  email: f.get("email"),
+                  name: f.get("username"),
+                  username: f.get("username"),
                   password: f.get("password"),
                   token: invite || f.get("token"),
                 });
-              await write("/api/auth/sign-in/email", {
-                email: f.get("email"),
+              await write("/api/auth/sign-in/username", {
+                username: f.get("username"),
                 password: f.get("password"),
               });
               if (invite) history.replaceState({}, "", "/");
@@ -601,23 +641,27 @@ function Auth({
             }
           }}
         >
-          {(setup || invite) && (
-            <Field label="Your name">
-              <input name="name" required autoComplete="name" />
-            </Field>
-          )}
-          <Field label="Email address">
-            <input name="email" type="email" required autoComplete="email" />
+          <Field label="Username">
+            <input
+              name="username"
+              required
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
+              minLength={3}
+              maxLength={40}
+              pattern="[a-zA-Z0-9_.\-]+"
+            />
           </Field>
           <Field
             label="Password"
-            hint={setup || invite ? "Use at least 12 characters." : undefined}
+            hint={setup || invite ? "Use at least 3 characters." : undefined}
           >
             <input
               name="password"
               type="password"
               required
-              minLength={setup || invite ? 12 : 1}
+              minLength={setup || invite ? 3 : 1}
               autoComplete={
                 setup || invite ? "new-password" : "current-password"
               }
@@ -641,6 +685,8 @@ function Auth({
         </form>
         <small className="muted">
           Private by default. No AI subscription required.
+          <br />
+          <a href="/guide">How to use this workspace with your AI →</a>
         </small>
       </section>
     </div>

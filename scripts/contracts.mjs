@@ -110,6 +110,29 @@ const other = await req("projects", {
   data: { name: "Isolated", prefix: "ISO" },
   expected: 201,
 });
+const membersWithAccess = await req("partners");
+const joinedPartner = membersWithAccess.find(
+  (m) =>
+    m.role === "partner" &&
+    m.name === "Partner" &&
+    !Object.keys(m.grants).length,
+);
+if (joinedPartner)
+  await req(`partners/${joinedPartner.id}`, {
+    method: "PATCH",
+    data: {
+      version: joinedPartner.version,
+      grants: {
+        [p.id]: [
+          "view-screens",
+          "comment",
+          "screen-review",
+          "view-backlog",
+          "tasks",
+        ],
+      },
+    },
+  });
 const path = `projects/${p.id}`;
 const credential = await req(`${path}/credentials`, {
   data: {
@@ -454,7 +477,7 @@ const transport = new StdioClientTransport({
 });
 await client.connect(transport);
 const tools = await client.listTools();
-assert.equal(tools.tools.length, 10);
+assert.equal(tools.tools.length, 12);
 assert.equal(
   tools.tools.some((t) => t.name.includes("review")),
   false,

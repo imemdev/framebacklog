@@ -1,4 +1,5 @@
 "use client";
+import { can } from "@/lib/access";
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -9,8 +10,9 @@ import {
   MessageSquare,
   ImageIcon,
 } from "lucide-react";
-import type { Actor, Project } from "@/lib/model";
+import { screenVersions, type Actor, type Project } from "@/lib/model";
 import { write, Modal, Field, ErrorNotice, Empty } from "./ui";
+import JourneyPlayer from "./journey-player";
 const Canvas = dynamic(() => import("./journey-canvas"), {
   ssr: false,
   loading: () => <div className="loading">Loading canvas…</div>,
@@ -27,13 +29,15 @@ export default function JourneyPage({
   openScreen: (id: string) => void;
 }) {
   const [selected, setSelected] = useState(project.journeys[0]?.id || ""),
-    [view, setView] = useState("screens"),
+    [view, setView] = useState(actor.role === "partner" ? "canvas" : "screens"),
     [modal, setModal] = useState(""),
+    [running, setRunning] = useState(false),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [createPosition, setCreatePosition] = useState<{ x: number; y: number }>();
   const journey =
     project.journeys.find((j) => j.id === selected) || project.journeys[0];
-  const owner = actor.role === "owner";
+  const owner = can(actor, project.id, "journey-edit");
   const screens = journey
     ? journey.nodes
         .map((n) => project.screens.find((s) => s.id === n.screenId)!)
@@ -49,14 +53,27 @@ export default function JourneyPage({
             See how the experience connects. Review it one screen at a time.
           </p>
         </div>
-        {owner && (
-          <button className="primary" onClick={() => setModal("screen")}>
+        {can(actor, project.id, "upload") && (
+          <button
+            className="primary"
+            onClick={() => {
+              setCreatePosition(undefined);
+              setModal("screen");
+            }}
+          >
             <Plus size={18} />
             Add screen
           </button>
         )}
       </div>
       <div className="journey-toolbar">
+        <button
+          className="primary"
+          disabled={!journey?.nodes.length}
+          onClick={() => setRunning(true)}
+        >
+          ▶ Run journey
+        </button>
         <select
           aria-label="Journey"
           value={journey?.id || ""}
@@ -106,17 +123,28 @@ export default function JourneyPage({
           journey={journey}
           project={project}
           editable={owner}
+          createScreen={
+            can(actor, project.id, "upload")
+              ? (position) => {
+                  setCreatePosition(position);
+                  setModal("screen");
+                }
+              : undefined
+          }
           refresh={refresh}
           openScreen={openScreen}
         />
       ) : (
         <div className="screen-grid">
           {screens.map((s, i) => {
-            const v = s.versions.at(-1)!;
+            const v = screenVersions(s)[0];
             const node = journey?.nodes.find((n) => n.screenId === s.id);
             const next = journey?.edges.filter((e) => e.source === node?.id);
             return (
-              <article className="screen-card" key={s.id}>
+              <article
+                className={`screen-card ${s.versions.length > 1 ? "version-stack" : ""}`}
+                key={s.id}
+              >
                 <button
                   className="screen-open"
                   onClick={() => openScreen(s.id)}
@@ -140,7 +168,15 @@ export default function JourneyPage({
                   </div>
                   <div className="screen-info">
                     <div className="card-meta">
-                      <span>VERSION {v.number}</span>
+                      <span>
+                        VERSION {v.number}
+                        {s.versions.length > 1
+                          ? ` · ${s.versions.length} versions`
+                          : ""}
+                        {s.recommendation?.versionId === v.id
+                          ? " · Recommended"
+                          : ""}
+                      </span>
                       <span
                         className={`review-status ${v.status === "Approved" ? "approved" : v.status === "Changes requested" ? "changes" : ""}`}
                       >
@@ -209,7 +245,10 @@ export default function JourneyPage({
                 owner && (
                   <button
                     className="primary"
-                    onClick={() => setModal("screen")}
+                    onClick={() => {
+                      setCreatePosition(undefined);
+                      setModal("screen");
+                    }}
                   >
                     Add a screen
                   </button>
@@ -221,6 +260,14 @@ export default function JourneyPage({
             </Empty>
           )}
         </div>
+      )}
+      {running && journey && (
+        <JourneyPlayer
+          key={journey.id}
+          journey={journey}
+          project={project}
+          onClose={() => setRunning(false)}
+        />
       )}
       {modal && (
         <Modal
@@ -245,6 +292,7 @@ export default function JourneyPage({
                   await write(`projects/${project.id}/screens`, {
                     title: f.get("title"),
                     journeyId: journey?.id,
+                    position: createPosition,
                   });
                 }
                 await refresh();

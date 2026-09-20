@@ -1,3 +1,14 @@
+import { can, grantsInput } from "./access";
+import { partnerRequest, checkedGrants } from "./partners";
+import {
+  ideaInput,
+  tagInput,
+  starterTags,
+  saveTag,
+  saveIdea,
+  deleteIdea,
+  humanIdeas,
+} from "./ideas";
 import { z } from "zod";
 import { actor, auth, csrf, digest, limit, secret } from "./auth";
 import { body, failure, imageType, json, readBytes } from "./http";
@@ -5,6 +16,8 @@ import { getFile, putFile, settings, sql } from "./storage";
 import { mutate, readProject } from "./repository";
 import {
   authorize,
+  recommendScreen,
+  deleteTask,
   commentInput,
   complete,
   completionInput,
@@ -25,17 +38,33 @@ import {
   assertVersion,
   type Project,
 } from "./model";
+const usernameInput = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .min(3)
+  .max(40)
+  .regex(
+    /^[a-z0-9_.-]+$/,
+    "Use letters, numbers, dots, underscores or hyphens.",
+  );
 const accountInput = z
   .object({
-    name: z.string().trim().min(1).max(100),
+    name: z.string().trim().min(1).max(100).optional(),
+    username: usernameInput.optional(),
     email: z
       .email()
       .max(200)
-      .transform((v) => v.toLowerCase()),
-    password: z.string().min(12).max(128),
+      .transform((v) => v.toLowerCase())
+      .optional(),
+    password: z.string().min(3).max(128),
     token: z.string().min(1).max(200),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) => !!(value.username || value.email),
+    "Username is required.",
+  );
 const compact = (t: Project["tasks"][number]) => ({
   id: t.id,
   readableId: t.readableId,
@@ -71,7 +100,14 @@ async function dispatch(req: Request): Promise<Response> {
   }
   if ((path[0] === "setup" || path[0] === "join") && method === "POST") {
     await limit("registration", 10);
-    const data = accountInput.parse(await body(req));
+    const input = accountInput.parse(await body(req));
+    const data = {
+      ...input,
+      email: input.username
+        ? `${input.username}@users.custombacklog.invalid`
+        : input.email!,
+      name: input.name || input.username || input.email!.split("@")[0],
+    };
     let reservation = false;
     if (path[0] === "setup") {
       const config = await settings();
@@ -95,19 +131,34 @@ async function dispatch(req: Request): Promise<Response> {
       if (!rows.length)
         throw new Problem(
           403,
-          "Invitation is invalid, expired, used, or belongs to a different email.",
+          "Invitation is invalid, expired, used, or belongs to a different username.",
         );
     }
     try {
       const result = await (
         await auth()
       ).api.signUpEmail({
-        body: { email: data.email, password: data.password, name: data.name },
+        body: {
+          email: data.email,
+          password: data.password,
+          name: data.name,
+          ...(data.username ? { username: data.username } : {}),
+        },
       });
       await sql("INSERT INTO members(user_id,role) VALUES(?,?)", [
         result.user.id,
         reservation ? "owner" : "partner",
       ]);
+      if (!reservation) {
+        const [access] = await sql<{ grants: string }>(
+          "SELECT grants FROM invitation_access WHERE hash=?",
+          [await digest(data.token)],
+        );
+        await sql("INSERT INTO partner_access(user_id,grants) VALUES(?,?)", [
+          result.user.id,
+          access?.grants || "{}",
+        ]);
+      }
       return json({ ok: true });
     } catch (e) {
       if (reservation)
@@ -124,6 +175,7 @@ async function dispatch(req: Request): Promise<Response> {
   const a = await actor(req);
   await limit(`actor:${a.id}`);
   if (path[0] === "me") return json(a);
+  if (path[0] === "partners") return partnerRequest(req, a, path[1]);
   if (path[0] === "members") {
     owner(a);
     if (method === "DELETE" && path[1]) {
@@ -141,18 +193,36 @@ async function dispatch(req: Request): Promise<Response> {
     }
     return json(
       await sql(
-        "SELECT user.id,user.name,user.email,members.role FROM members JOIN user ON user.id=members.user_id",
+        "SELECT user.id,user.name,user.email,user.username,members.role FROM members JOIN user ON user.id=members.user_id",
       ),
     );
   }
   if (path[0] === "invitations" && method === "POST") {
     owner(a);
-    const { email } = z.object({ email: z.email() }).parse(await body(req));
+    const input = z
+      .object({
+        username: usernameInput.optional(),
+        email: z.email().optional(),
+        grants: grantsInput.default({}),
+      })
+      .refine(
+        (value) => !!(value.username || value.email),
+        "Username is required.",
+      )
+      .parse(await body(req));
+    const invitationGrants = await checkedGrants(input.grants);
+    const email = input.username
+      ? `${input.username}@users.custombacklog.invalid`
+      : input.email!;
     const token = secret();
     await sql("INSERT INTO invitations(hash,email,expires) VALUES(?,?,?)", [
       await digest(token),
       email.toLowerCase(),
       Date.now() + 86400000,
+    ]);
+    await sql("INSERT INTO invitation_access(hash,grants) VALUES(?,?)", [
+      await digest(token),
+      JSON.stringify(invitationGrants),
     ]);
     return json({
       url: `${(await settings()).url}/?invite=${token}`,
@@ -168,10 +238,12 @@ async function dispatch(req: Request): Promise<Response> {
         a.role === "ai" ? [a.projectId!] : [],
       );
       return json(
-        rows.map((r) => {
-          const p = JSON.parse(r.data) as Project;
-          return { id: p.id, name: p.name, prefix: p.prefix };
-        }),
+        rows
+          .filter((r) => can(a, JSON.parse(r.data).id))
+          .map((r) => {
+            const p = JSON.parse(r.data) as Project;
+            return { id: p.id, name: p.name, prefix: p.prefix };
+          }),
       );
     }
     if (method === "POST") {
@@ -197,6 +269,18 @@ async function dispatch(req: Request): Promise<Response> {
   authorize(a, projectId);
   const resource = path[2];
   const key = path[3];
+  if (a.role === "partner") {
+    const permission =
+      resource === "tasks" || resource === "work-context"
+        ? "view-backlog"
+        : ["screens", "journeys", "comments", "files"].includes(resource)
+          ? "view-screens"
+          : ["ideas", "idea-tags"].includes(resource)
+            ? "view-ideas"
+            : "read";
+    authorize(a, projectId, permission);
+  }
+
   const receipt = async (data: unknown) => {
     const key = req.headers.get("idempotency-key");
     if (!key || key.length > 100)
@@ -209,6 +293,59 @@ async function dispatch(req: Request): Promise<Response> {
       fingerprint: await digest(`${url.pathname}:${JSON.stringify(data)}`),
     };
   };
+  if (resource === "ideas" || resource === "idea-tags") {
+    humanIdeas(a);
+    if (method === "GET") {
+      const { project } = await readProject(projectId, a);
+      return json(
+        resource === "idea-tags"
+          ? project.ideaTags || starterTags
+          : project.ideas || [],
+      );
+    }
+    if (resource === "idea-tags" && method === "POST") {
+      const { name } = z
+        .object({ name: tagInput })
+        .strict()
+        .parse(await body(req));
+      return json(
+        await mutate(projectId, a, (p) => ({ name: saveTag(p, a, name) })),
+      );
+    }
+    if (resource === "ideas" && method === "POST" && !key) {
+      const data = ideaInput.parse(await body(req));
+      return json(
+        await mutate(
+          projectId,
+          a,
+          (p) => saveIdea(p, a, data),
+          await receipt(data),
+        ),
+        201,
+      );
+    }
+    if (resource === "ideas" && method === "PATCH" && key) {
+      const { version, ...data } = ideaInput
+        .extend({ version: z.number().int().positive() })
+        .parse(await body(req));
+      return json(
+        await mutate(projectId, a, (p) => saveIdea(p, a, data, key, version)),
+      );
+    }
+    if (resource === "ideas" && method === "DELETE" && key) {
+      const { version } = z
+        .object({ version: z.number().int().positive() })
+        .strict()
+        .parse(await body(req));
+      return json(
+        await mutate(projectId, a, (p) => deleteIdea(p, a, key, version)),
+      );
+    }
+    throw new Problem(
+      405,
+      "Use GET/POST for ideas or tags, PATCH/DELETE for an existing idea.",
+    );
+  }
   if (resource === "credentials") {
     owner(a);
     if (method === "GET")
@@ -275,7 +412,15 @@ async function dispatch(req: Request): Promise<Response> {
     const action = path[4];
     const raw = await body(req);
     let result;
-    if (action === "progress" && method === "PATCH")
+    if (!action && method === "DELETE") {
+      const d = z
+        .object({ version: z.number().int().positive() })
+        .strict()
+        .parse(raw);
+      result = await mutate(projectId, a, (p) =>
+        deleteTask(p, a, key, d.version),
+      );
+    } else if (action === "progress" && method === "PATCH")
       result = await mutate(projectId, a, (p) =>
         compact(progress(p, a, key, progressInput.parse(raw))),
       );
@@ -287,7 +432,7 @@ async function dispatch(req: Request): Promise<Response> {
         await receipt(raw),
       );
     else if (action === "comments" && method === "POST") {
-      authorize(a, projectId, "comment");
+      authorize(a, projectId, a.role === "partner" ? "tasks" : "comment");
       const d = z
         .object({ text: z.string().trim().min(1).max(4000) })
         .strict()
@@ -316,6 +461,12 @@ async function dispatch(req: Request): Promise<Response> {
       .object({
         title: z.string().trim().min(1).max(150),
         journeyId: z.string().optional(),
+        position: z
+          .object({
+            x: z.number().min(-100000).max(100000),
+            y: z.number().min(-100000).max(100000),
+          })
+          .optional(),
       })
       .parse(await body(req));
     return json(
@@ -344,7 +495,7 @@ async function dispatch(req: Request): Promise<Response> {
             j.nodes.push({
               id: screen.id,
               screenId: screen.id,
-              position: { x: j.nodes.length * 300, y: 100 },
+              position: d.position ?? { x: j.nodes.length * 300, y: 100 },
             });
             j.version++;
           }
@@ -390,6 +541,19 @@ async function dispatch(req: Request): Promise<Response> {
         return v;
       }),
       201,
+    );
+  }
+  if (resource === "screens" && path[4] === "recommend" && method === "POST") {
+    const d = z
+      .object({
+        versionId: z.string(),
+        version: z.number().int().nonnegative(),
+      })
+      .parse(await body(req));
+    return json(
+      await mutate(projectId, a, (p) =>
+        recommendScreen(p, a, key, d.versionId, d.version),
+      ),
     );
   }
   if (resource === "screens" && path[4] === "review" && method === "POST") {
@@ -488,7 +652,7 @@ async function dispatch(req: Request): Promise<Response> {
     );
   }
   if (resource === "journeys" && method === "POST") {
-    authorize(a, projectId, "tasks");
+    authorize(a, projectId, a.role === "partner" ? "journey-edit" : "tasks");
     const d = z
       .object({ name: z.string().trim().min(1).max(100) })
       .parse(await body(req));
@@ -516,7 +680,7 @@ async function dispatch(req: Request): Promise<Response> {
     );
   }
   if (resource === "journeys" && method === "PUT") {
-    authorize(a, projectId, "tasks");
+    authorize(a, projectId, a.role === "partner" ? "journey-edit" : "tasks");
     const d = layoutInput.parse(await body(req));
     return json(
       await mutate(projectId, a, (p) => {
@@ -554,7 +718,32 @@ async function dispatch(req: Request): Promise<Response> {
   }
   const { project: p, revision } = await readProject(projectId, a);
   if (!resource || resource === "snapshot")
-    return json({ ...p, receipts: undefined, revision });
+    return json(
+      a.role !== "partner"
+        ? { ...p, receipts: undefined, revision }
+        : {
+            ...p,
+            receipts: undefined,
+            revision,
+            tasks: can(a, projectId, "view-backlog")
+              ? p.tasks.map((t) => ({
+                  ...t,
+                  screenIds: can(a, projectId, "view-screens")
+                    ? t.screenIds
+                    : [],
+                  sourceCommentId: can(a, projectId, "view-screens")
+                    ? t.sourceCommentId
+                    : undefined,
+                }))
+              : [],
+            screens: can(a, projectId, "view-screens") ? p.screens : [],
+            journeys: can(a, projectId, "view-screens") ? p.journeys : [],
+            comments: can(a, projectId, "view-screens") ? p.comments : [],
+            ideas: can(a, projectId, "view-ideas") ? p.ideas : [],
+            ideaTags: can(a, projectId, "view-ideas") ? p.ideaTags : [],
+            activity: [],
+          },
+    );
   if (resource === "files" && method === "GET") {
     const version = p.screens
       .flatMap((s) => s.versions)
@@ -602,6 +791,11 @@ async function dispatch(req: Request): Promise<Response> {
     });
   }
   if (resource === "work-context") {
+    if (a.role === "partner")
+      throw new Problem(
+        403,
+        "Use the permission-filtered snapshot and task endpoints.",
+      );
     const active = p.tasks
       .filter((t) => t.status === "In progress")
       .slice(0, 10);
@@ -629,6 +823,11 @@ async function dispatch(req: Request): Promise<Response> {
     });
   }
   if (resource === "changes") {
+    if (a.role === "partner")
+      throw new Problem(
+        403,
+        "Use the permission-filtered project snapshot to refresh.",
+      );
     const cursor = z.coerce
       .number()
       .int()
@@ -660,7 +859,10 @@ async function dispatch(req: Request): Promise<Response> {
           url.searchParams.get("comments") === "true"
             ? p.comments.filter((c) => c.screenId === key).slice(-50)
             : undefined,
-        tasks: p.tasks.filter((t) => t.screenIds.includes(key)).map(compact),
+        tasks:
+          a.role === "partner" && !can(a, projectId, "view-backlog")
+            ? []
+            : p.tasks.filter((t) => t.screenIds.includes(key)).map(compact),
       });
     }
     return json(

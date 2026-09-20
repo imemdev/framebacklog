@@ -1,3 +1,4 @@
+import { ideaSchema, tagInput } from "./ideas";
 import { z } from "zod";
 import {
   type Actor,
@@ -55,6 +56,8 @@ const task = taskInput.extend({
   updatedAt: z.iso.datetime(),
 });
 const project = z.object({
+  ideas: z.array(ideaSchema).max(500).default([]),
+  ideaTags: z.array(tagInput).max(100).optional(),
   id: z.uuid(),
   name: z.string().min(1).max(100),
   prefix: z.string().regex(/^[A-Z]{2,6}$/),
@@ -67,6 +70,14 @@ const project = z.object({
         id: z.uuid(),
         title: z.string().max(150),
         versions: z.array(version).min(1).max(20),
+        recommendation: z
+          .object({
+            versionId: z.uuid(),
+            actor: z.string().max(100),
+            at: z.string(),
+          })
+          .optional(),
+        recommendationVersion: z.number().int().nonnegative().optional(),
       }),
     )
     .max(100),
@@ -174,7 +185,11 @@ export async function transfer(req: Request, a: Actor, projectId: string) {
       .filter(Number.isFinite),
   );
   for (const s of p.screens)
-    if (s.versions.some((v, i) => v.number !== i + 1))
+    if (
+      (s.recommendation &&
+        !s.versions.some((v) => v.id === s.recommendation!.versionId)) ||
+      s.versions.some((v, i) => v.number !== i + 1)
+    )
       throw new Problem(
         422,
         "Screen versions must have consecutive version numbers.",
