@@ -120,7 +120,7 @@ export default function JourneyCanvas({
     [future, setFuture] = useState<Layout[]>([]),
     [connect, setConnect] = useState(false),
     [zoom, setZoom] = useState(100),
-    [minimap, setMinimap] = useState(false),
+    [minimap, setMinimap] = useState(true),
     [selected, setSelected] = useState<string[]>([]);
   const flow = useRef<ReactFlowInstance | null>(null);
   const [createAt, setCreateAt] = useState<{ x: number; y: number } | null>(
@@ -466,7 +466,7 @@ export default function JourneyCanvas({
         >
           <Background gap={24} size={1} />
           <Controls showInteractive={false} />
-          {minimap && <MiniMap pannable zoomable />}
+          {minimap && <MiniMap position="top-right" pannable zoomable />}
         </ReactFlow>
         <div className="canvas-hint">
           Drag to arrange · Scroll to zoom

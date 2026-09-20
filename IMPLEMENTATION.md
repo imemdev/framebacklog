@@ -86,3 +86,6 @@ Workers Free has a documented 10 ms CPU budget. Password hashing/sign-in exceede
 - [x] Public /guide linked from sign-in: project credentials, local stdio MCP, sharing, remote connectivity and workflow rules.
 - [x] README project-permission correction, contribution/security guidance, MIT license and local data/store exclusions.
 - [x] 14 tests and real MCP/project-isolation regression passed; unauthenticated guide verified at desktop/phone widths.
+
+- [x] Minimap enabled by default in the top-right corner; hide/show checkbox retained.
+- [x] Source publication checks passed: strict typing, 14 tests, formatting, Node production build and OpenNext build. Applied Prettier to the existing journey-player/public-guide CSS without changing declarations; reviewed tracked files and both existing commits for publication-sensitive material.

@@ -94,3 +94,13 @@ OpenNext Cloudflare adapter build also passed for this routing change; runtime d
 ## FrameBacklog public guide and source release — 2026-09-20
 
 14 tests, strict typing and Next.js production build passed. Unauthenticated Chromium verified the sign-in guide link, FrameBacklog name, environment instructions and no overflow at 390px; mobile screenshot inspected. The real `scripts/access-check.mjs` scenario passed again on isolated Node/SQLite: project grants, private files, immediate revocation, stale conflicts, actual stdio MCP title/description/status/comment updates, AI cross-project and human-review rejection. Release candidate file review found a generated local pnpm store, now excluded; databases, uploads, environments, and test browser artifacts remain ignored. Existing committed screenshots show synthetic demo data. Source publication does not deploy the application.
+
+## Minimap default — 2026-09-20
+
+Strict typing and Node production build passed. Chromium on localhost:3000 confirmed Minimap is checked by default, the visible minimap has top-right positioning, and uncheck/check hides and restores it. No project data changed.
+
+## GitHub publication validation — 2026-09-20
+
+Re-ran `pnpm typecheck`, `pnpm test` (14 tests across 4 files), `pnpm format:check`, `pnpm build`, and `pnpm cf:build`; all passed. The first formatting check reported existing compact rules in `src/app/globals.css`; Prettier expanded those rules without changing declarations, and the repeated formatting check passed. Node and OpenNext builds ran sequentially. Logs and exit statuses are retained locally under ignored `test-results/framebacklog-publish/`.
+
+Reviewed the current tracked source and both existing commits, including all three tracked verification PNGs. No publication blockers were found: environment examples contain placeholders, credential literals are test fixtures, and screenshots show the synthetic Gather demo. Local environments, databases, uploads, browser artifacts and generated build files remain ignored. This publication pass did not repeat the earlier browser scenarios or run Docker or a live deployment.
