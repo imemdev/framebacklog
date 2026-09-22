@@ -6,7 +6,6 @@ services:
     environment:
       APP_URL: ${APP_URL:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?Set a random session secret in .env}
-      SETUP_TOKEN: ${SETUP_TOKEN:?Set a random installation token in .env}
       DATA_DIR: /data
     volumes:
       - backlog-data:/data

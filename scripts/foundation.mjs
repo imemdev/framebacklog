@@ -31,7 +31,6 @@ await req("/api/v1/setup", {
   name: "Developer",
   email,
   password: "foundation-password-123",
-  token: process.env.SETUP_TOKEN,
 });
 await req("/api/auth/sign-in/email", {
   email,

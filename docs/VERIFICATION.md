@@ -1,12 +1,15 @@
 # Verification record
 
-Verified locally on 2026-09-20. This file distinguishes implementation from actual runtime evidence.
+Original verification was recorded on 2026-09-20; the local development launcher check was added on 2026-09-21. Owner onboarding and fixed local credentials were verified on 2026-09-22. This file distinguishes implementation from actual runtime evidence.
 
 | Area | Result and evidence |
 |---|---|
 | Strict TypeScript | `pnpm typecheck` passed. |
-| Business rules | `pnpm test`: 6 tests passed, covering workflow, review history, required feedback, blockers, dependency cycles/incomplete dependencies, optimistic versions, roles/scope, and comment-to-task deduplication. |
+| Business rules and local owner provisioning | `pnpm test`: 22 tests passed, including eight isolated SQLite provisioning tests covering fresh creation, identity/project preservation, session handling, collisions, rollback, and concurrent changes. Strict typing and formatting passed. |
 | Node production build | `pnpm build` passed with Next.js 16.3.5. Standalone production server ran on port 3001 against a persistent SQLite directory. |
+| Local development launcher | `bash -n scripts/framebacklog.sh` passed. With an isolated `DATA_DIR`, SQLite migration completed and `/` returned HTTP 200 on ports 3137 and 3138. Ctrl+C and closing the launcher terminal both printed the cleanup message and released their ports. Browser opening was disabled for these process checks. |
+| Owner onboarding | On 2026-09-22, the production Node server on isolated port 3141 showed exactly two owner-setup inputs: username and password. Browser owner creation, project creation, invitation creation, and partner join passed with no owner page/console errors. A second owner attempt returned 409; joining without an invitation and a mutation from the wrong Origin each returned 403. The development-only exception and installation-token setting have been removed. |
+| Fixed local owner | Private launcher configuration was applied to the existing owner. The owner ID and a digest of all project records were unchanged; repeated preparation reported unchanged credentials. Real username/password sign-in returned 200 and `/api/v1/me` confirmed the owner role. Only the verification session was signed out. |
 | Workers adapter build | `pnpm cf:build` passed with OpenNext 1.20.6. No framework substitution. |
 | Foundation before UI | Both runtimes passed owner setup/sign-in, project/task write-read, protected PNG upload/retrieval and anonymous image rejection before substantial UI implementation. |
 | REST + MCP, Node | 25 contract checks passed; [raw report](verification/node-contracts.json). |
@@ -21,10 +24,14 @@ Verified locally on 2026-09-20. This file distinguishes implementation from actu
 | End-to-end browser suite | `pnpm test:e2e`: 6/6 passed in the final combined run (38.6 seconds). Screenshots are generated under ignored `test-results/`; curated examples are copied below when retained. |
 | Accessibility/contrast | axe-core WCAG 2 A/AA and 2.1 AA checks found no violations in backlog, journey list, canvas, mobile list, task panel, settings or screen review. Initial contrast failures were fixed and rerun. [View-scoped report](verification/accessibility.json). This is not a claim of universal accessibility or screen-reader user testing. |
 | Upload privacy | Anonymous reads return 401; another project's AI credential receives 403; active SVG masquerading as PNG is rejected; raster bytes survive protected retrieval and export/import. |
+| Screen image and screen CRUD | On 2026-09-22, a fresh disposable Node server on port 3142 passed a focused owner-only API check: multipart Version 1 creation, placeholder Version 1 add/replace/remove, title rename, screen deletion, journey-node cleanup, task-link cleanup, and protected image retrieval. The check used a temporary database and did not touch the user workspace. |
+| Screen/connection/playback UI | On 2026-09-22, Chromium against the same disposable server passed upload/remove controls, the explicit From → To connection preview and Swap direction action, and the visible `Playing · 1 seconds per screen` normal-speed status with no page errors. |
 | Portable export/import | Screens, versions, comments, pins, task links, journey positions and relationships round-trip; auth secrets/receipts are excluded; invalid file keys/paths are rejected. |
 | Dependency audit | `pnpm audit --prod`: no known vulnerabilities reported at the time of verification. |
-| Live Cloudflare | **Not deployed or verified live.** Configuration and instructions are prepared; local adapter runtime passed. |
+| Live Cloudflare | Deployed on 2026-09-22 as Worker version `3070ad42-78f4-4849-9257-72daeedda75b` at [custombacklog.medimemhamdi18.workers.dev](https://custombacklog.medimemhamdi18.workers.dev). Wrangler reported the expected D1/R2/Assets bindings; read-only GET `/` and `/api/openapi` both returned HTTP 200. Account quota enforcement and billing were not measured. |
 | Docker | **Configuration prepared; container not run.** Docker CLI/daemon is absent here. Node persistence passed, but the requested container-volume restart check remains unverified. |
+
+The 2026-09-22 update passed `pnpm typecheck`, `pnpm test` (22 tests), `pnpm format:check`, `pnpm build`, and `pnpm cf:build`. The screen CRUD API and Chromium checks used disposable data; the test server was stopped afterward. The verified build was deployed to the existing Worker as version `3070ad42-78f4-4849-9257-72daeedda75b`, followed by HTTP 200 smoke checks. No Docker execution or live quota/billing validation was performed.
 
 ## Assistant workflow measurement
 
@@ -45,7 +52,7 @@ These results are incompatible with a blanket claim that password authentication
 
 ## Remaining acceptance gaps
 
-Docker container/volume restart and live Cloudflare deployment are the unverified infrastructure targets. Physical mobile devices, non-Chromium browsers and assistive-technology user testing were not run. Initial product capacity and integration boundaries are in [LIMITATIONS.md](LIMITATIONS.md).
+Docker container/volume restart and live Cloudflare quota/billing validation are the unverified infrastructure targets. Physical mobile devices, non-Chromium browsers and assistive-technology user testing were not run. Initial product capacity and integration boundaries are in [LIMITATIONS.md](LIMITATIONS.md).
 
 ## Retained synthetic demo screenshots
 
@@ -83,7 +90,7 @@ Strict typing, 12 domain tests, standard Next.js and OpenNext builds passed. `sc
 
 ## Automatic journey playback — 2026-09-20
 
-Strict typing, 12 domain tests and Node/OpenNext builds passed. `scripts/playback-check.mjs` used an isolated five-screen branched journey with real screenshots: browser clock verified 0.5× and 1.25×/0.75× timing, pause/resume, automatic forward traversal, indefinite branch wait, both destination choices, end-of-path status, restart, Escape dismissal, and 390px layout under reduced-motion preference. No page errors or phone overflow; phone screenshot inspected. The test edits disposable journey data only. Run with TEST_URL, TEST_USERNAME and TEST_PASSWORD. Playback uses four seconds per screen at 1×, pauses when the tab is hidden, and requires a choice before revisiting a loop. No live deployment performed.
+Strict typing, 12 domain tests and Node/OpenNext builds passed. `scripts/playback-check.mjs` used an isolated five-screen branched journey with real screenshots: browser clock verified 0.5× and 1.25×/0.75× timing, pause/resume, automatic forward traversal, indefinite branch wait, both destination choices, end-of-path status, restart, Escape dismissal, and 390px layout under reduced-motion preference. No page errors or phone overflow; phone screenshot inspected. The test edits disposable journey data only. Run with TEST_URL, TEST_USERNAME and TEST_PASSWORD. Playback uses one second per screen at 1×, pauses when the tab is hidden, and requires a choice before revisiting a loop. No live deployment performed.
 
 ## Canvas arrow routing — 2026-09-20
 

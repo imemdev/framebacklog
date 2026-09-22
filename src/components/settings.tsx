@@ -309,8 +309,8 @@ export default function SettingsPage({
           <section className="settings-card">
             <h2>Portable project export</h2>
             <p>
-              Download screens, immutable versions, comments, tasks, journeys,
-              and review history. Authentication credentials are excluded.
+              Download screens, versioned images, comments, tasks, journeys, and
+              review history. Authentication credentials are excluded.
             </p>
             <a
               className="button primary"

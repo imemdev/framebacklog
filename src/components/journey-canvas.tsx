@@ -22,7 +22,16 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { routeConnection } from "@/lib/edge-routing";
-import { Undo2, Redo2, Network, Plus, ImageIcon, Trash2 } from "lucide-react";
+import {
+  Undo2,
+  Redo2,
+  Network,
+  Plus,
+  ImageIcon,
+  Trash2,
+  ArrowRight,
+  ArrowRightLeft,
+} from "lucide-react";
 import { screenVersions, type Project, type Journey } from "@/lib/model";
 import { write, Modal, Field, ErrorNotice } from "./ui";
 type ScreenData = {
@@ -119,6 +128,8 @@ export default function JourneyCanvas({
     [history, setHistory] = useState<Layout[]>([]),
     [future, setFuture] = useState<Layout[]>([]),
     [connect, setConnect] = useState(false),
+    [connectionSource, setConnectionSource] = useState(""),
+    [connectionTarget, setConnectionTarget] = useState(""),
     [zoom, setZoom] = useState(100),
     [minimap, setMinimap] = useState(true),
     [selected, setSelected] = useState<string[]>([]);
@@ -349,7 +360,15 @@ export default function JourneyCanvas({
             >
               Align top
             </button>
-            <button onClick={() => setConnect(true)}>
+            <button
+              onClick={() => {
+                setConnectionSource(layout.nodes[0]?.id || "");
+                setConnectionTarget(
+                  layout.nodes[1]?.id || layout.nodes[0]?.id || "",
+                );
+                setConnect(true);
+              }}
+            >
               <Plus size={16} />
               Connection
             </button>
@@ -486,7 +505,7 @@ export default function JourneyCanvas({
                       layout.nodes.find((n) => n.id === e.source)?.screenId,
                   )?.title
                 }{" "}
-                →{" "}
+                <ArrowRight size={14} aria-hidden />{" "}
                 {
                   project.screens.find(
                     (s) =>
@@ -511,6 +530,37 @@ export default function JourneyCanvas({
                     });
                 }}
               />
+              <button
+                aria-label={`Reverse ${
+                  project.screens.find(
+                    (s) =>
+                      s.id ===
+                      layout.nodes.find((n) => n.id === e.source)?.screenId,
+                  )?.title || "source"
+                } to ${
+                  project.screens.find(
+                    (s) =>
+                      s.id ===
+                      layout.nodes.find((n) => n.id === e.target)?.screenId,
+                  )?.title || "target"
+                } connection`}
+                onClick={() =>
+                  change({
+                    ...layout,
+                    edges: layout.edges.map((edge) =>
+                      edge.id === e.id
+                        ? {
+                            ...edge,
+                            source: edge.target,
+                            target: edge.source,
+                          }
+                        : edge,
+                    ),
+                  })
+                }
+              >
+                <ArrowRightLeft size={16} />
+              </button>
               <button
                 aria-label={`Remove ${e.label} connection`}
                 onClick={() => setRemoveEdge(e.id)}
@@ -587,12 +637,51 @@ export default function JourneyCanvas({
               setConnect(false);
             }}
           >
+            <div className="connection-direction" aria-live="polite">
+              <strong>
+                {project.screens.find(
+                  (s) =>
+                    s.id ===
+                    layout.nodes.find((n) => n.id === connectionSource)
+                      ?.screenId,
+                )?.title || "Choose a start screen"}
+                <ArrowRight size={16} aria-hidden />
+                {project.screens.find(
+                  (s) =>
+                    s.id ===
+                    layout.nodes.find((n) => n.id === connectionTarget)
+                      ?.screenId,
+                )?.title || "Choose a destination"}
+              </strong>
+              <span>The arrow points to the destination screen.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setConnectionSource(connectionTarget);
+                  setConnectionTarget(connectionSource);
+                }}
+              >
+                <ArrowRightLeft size={15} />
+                Swap direction
+              </button>
+            </div>
             {["source", "target"].map((name) => (
               <Field
                 key={name}
                 label={name === "source" ? "From screen" : "To screen"}
               >
-                <select name={name} required>
+                <select
+                  name={name}
+                  required
+                  value={
+                    name === "source" ? connectionSource : connectionTarget
+                  }
+                  onChange={(event) =>
+                    name === "source"
+                      ? setConnectionSource(event.target.value)
+                      : setConnectionTarget(event.target.value)
+                  }
+                >
                   {layout.nodes.map((n) => (
                     <option key={n.id} value={n.id}>
                       {project.screens.find((s) => s.id === n.screenId)?.title}

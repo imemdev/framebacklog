@@ -70,6 +70,7 @@ const project = z.object({
         id: z.uuid(),
         title: z.string().max(150),
         versions: z.array(version).min(1).max(20),
+        imageVersion: z.number().int().nonnegative().optional(),
         recommendation: z
           .object({
             versionId: z.uuid(),

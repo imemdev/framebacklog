@@ -608,7 +608,7 @@ function Auth({
         </h1>
         <p className="muted">
           {setup
-            ? "Use the setup token configured by your installation administrator."
+            ? "Choose a username and password for your owner account."
             : invite
               ? "Create your reviewer account to share feedback."
               : "Pick up where your team left off."}
@@ -626,7 +626,7 @@ function Auth({
                   name: f.get("username"),
                   username: f.get("username"),
                   password: f.get("password"),
-                  token: invite || f.get("token"),
+                  ...(!setup && invite ? { token: invite } : {}),
                 });
               await write("/api/auth/sign-in/username", {
                 username: f.get("username"),
@@ -667,11 +667,6 @@ function Auth({
               }
             />
           </Field>
-          {setup && (
-            <Field label="Installation setup token">
-              <input name="token" type="password" required autoComplete="off" />
-            </Field>
-          )}
           <button className="primary full-width" disabled={busy}>
             {busy
               ? "Please wait…"

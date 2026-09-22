@@ -1,6 +1,6 @@
 "use client";
 import { can } from "@/lib/access";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -12,6 +12,7 @@ import {
   ImageIcon,
   CheckCircle2,
   Maximize2,
+  Trash2,
 } from "lucide-react";
 import {
   screenVersions,
@@ -39,6 +40,7 @@ export default function ScreenPanel({
   openTask: (id: string) => void;
 }) {
   const [versionId, setVersionId] = useState(screenVersions(screen)[0].id),
+    [screenTitle, setScreenTitle] = useState(screen.title),
     [pinMode, setPinMode] = useState(false),
     [activePin, setActivePin] = useState(""),
     [pin, setPin] = useState<{ x: number; y: number }>(),
@@ -50,8 +52,11 @@ export default function ScreenPanel({
     [reply, setReply] = useState(""),
     [createComment, setCreateComment] = useState(""),
     [showResolved, setShowResolved] = useState(false),
-    [focus, setFocus] = useState(false);
+    [focus, setFocus] = useState(false),
+    [uploadMode, setUploadMode] = useState<"image" | "version">("image");
   const input = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  useEffect(() => setScreenTitle(screen.title), [screen.title]);
   const v =
     screen.versions.find((v) => v.id === versionId) || screen.versions.at(-1)!;
   const versions = screenVersions(screen);
@@ -102,6 +107,39 @@ export default function ScreenPanel({
       setBusy(false);
     }
   }
+  function chooseUpload(mode: "image" | "version") {
+    setUploadMode(mode);
+    fileInput.current?.click();
+  }
+  function saveTitle(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const title = screenTitle.trim();
+    if (!title || title === screen.title) return;
+    void run(() =>
+      write(`projects/${project.id}/screens/${screen.id}`, { title }, "PATCH"),
+    );
+  }
+  async function deleteScreen() {
+    if (
+      !window.confirm(
+        `Delete “${screen.title}”? Its image files, comments, journey links, and task links will be removed.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`projects/${project.id}/screens/${screen.id}`, {
+        method: "DELETE",
+      });
+      await refresh();
+      onClose();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <Modal
@@ -133,10 +171,48 @@ export default function ScreenPanel({
             {focus ? "Split view" : "Focus preview"}
           </button>
           {can(actor, project.id, "upload") && (
-            <label className="button upload-button">
-              <Upload size={16} />
-              New version
+            <>
+              <button
+                className="upload-button"
+                disabled={busy}
+                onClick={() => chooseUpload("image")}
+              >
+                <Upload size={16} />
+                {v.key ? "Replace image" : "Upload image"}
+              </button>
+              {v.key && (
+                <button
+                  disabled={busy}
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `Remove the image from Version ${v.number}? Its version and feedback history will remain.`,
+                      )
+                    )
+                      return;
+                    void run(() =>
+                      api(
+                        `projects/${project.id}/screens/${screen.id}/versions/${v.id}/image`,
+                        {
+                          method: "DELETE",
+                          headers: {
+                            "If-Match": String(screen.imageVersion ?? 0),
+                          },
+                        },
+                      ),
+                    );
+                  }}
+                >
+                  <Trash2 size={16} />
+                  Remove image
+                </button>
+              )}
+              <button disabled={busy} onClick={() => chooseUpload("version")}>
+                <Plus size={16} />
+                New version
+              </button>
               <input
+                ref={fileInput}
                 type="file"
                 accept="image/png,image/jpeg,image/webp"
                 hidden
@@ -144,26 +220,40 @@ export default function ScreenPanel({
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
+                  e.target.value = "";
                   void run(async () => {
                     if (file.size > 5 * 1024 * 1024)
                       throw new Error("Choose an image smaller than 5 MB.");
-                    const created = await api<{ id: string }>(
-                      `projects/${project.id}/screens/${screen.id}/versions`,
-                      {
-                        method: "POST",
-                        body: file,
-                        headers: {
-                          "Content-Type": file.type,
-                          "If-Match": String(screen.versions.length),
+                    if (uploadMode === "version") {
+                      const created = await api<{ id: string }>(
+                        `projects/${project.id}/screens/${screen.id}/versions`,
+                        {
+                          method: "POST",
+                          body: file,
+                          headers: {
+                            "Content-Type": file.type,
+                            "If-Match": String(screen.versions.length),
+                          },
                         },
-                      },
-                    );
-                    await refresh();
-                    setVersionId(created.id);
+                      );
+                      setVersionId(created.id);
+                    } else {
+                      await api(
+                        `projects/${project.id}/screens/${screen.id}/versions/${v.id}/image`,
+                        {
+                          method: "PUT",
+                          body: file,
+                          headers: {
+                            "Content-Type": file.type,
+                            "If-Match": String(screen.imageVersion ?? 0),
+                          },
+                        },
+                      );
+                    }
                   });
                 }}
               />
-            </label>
+            </>
           )}
         </div>
         <section className="version-carousel" aria-label="Screen versions">
@@ -390,6 +480,31 @@ export default function ScreenPanel({
             <div className="save-message" role="status">
               {busy ? "Saving…" : notice}
             </div>
+            {can(actor, project.id, "upload") && (
+              <section className="screen-management">
+                <h3>Screen settings</h3>
+                <form onSubmit={saveTitle}>
+                  <Field label="Screen title">
+                    <input
+                      value={screenTitle}
+                      onChange={(e) => setScreenTitle(e.target.value)}
+                      maxLength={150}
+                    />
+                  </Field>
+                  <button disabled={busy || !screenTitle.trim()}>
+                    Save title
+                  </button>
+                </form>
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void deleteScreen()}
+                >
+                  <Trash2 size={16} />
+                  Delete screen
+                </button>
+              </section>
+            )}
             <h3>
               <MessageSquare size={18} />
               Discussion <span className="count">{roots.length}</span>

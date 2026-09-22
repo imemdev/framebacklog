@@ -8,7 +8,7 @@ export const permissionOptions = [
   ["view-screens", "View journey, screenshots and discussions"],
   ["comment", "Add, reply to and resolve screen comments"],
   ["screen-review", "Recommend, approve or request changes on screens"],
-  ["upload", "Add screens and upload versions"],
+  ["upload", "Add, rename, delete screens and manage screenshot images"],
   ["journey-edit", "Create journeys and edit layout/connections"],
   ["view-ideas", "View ideas and tags"],
   ["ideas", "Create ideas/tags and edit/delete own ideas"],

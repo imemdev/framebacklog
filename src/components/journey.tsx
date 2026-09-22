@@ -11,7 +11,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { screenVersions, type Actor, type Project } from "@/lib/model";
-import { write, Modal, Field, ErrorNotice, Empty } from "./ui";
+import { api, write, Modal, Field, ErrorNotice, Empty } from "./ui";
 import JourneyPlayer from "./journey-player";
 const Canvas = dynamic(() => import("./journey-canvas"), {
   ssr: false,
@@ -289,11 +289,25 @@ export default function JourneyPage({
                   );
                   setSelected(j.id);
                 } else {
-                  await write(`projects/${project.id}/screens`, {
-                    title: f.get("title"),
-                    journeyId: journey?.id,
-                    position: createPosition,
-                  });
+                  const image = f.get("image");
+                  if (image instanceof File && image.size > 0) {
+                    const form = new FormData();
+                    form.set("title", String(f.get("title")));
+                    if (journey?.id) form.set("journeyId", journey.id);
+                    if (createPosition)
+                      form.set("position", JSON.stringify(createPosition));
+                    form.set("image", image);
+                    await api(`projects/${project.id}/screens`, {
+                      method: "POST",
+                      body: form,
+                    });
+                  } else {
+                    await write(`projects/${project.id}/screens`, {
+                      title: f.get("title"),
+                      journeyId: journey?.id,
+                      position: createPosition,
+                    });
+                  }
                 }
                 await refresh();
                 setModal("");
@@ -309,7 +323,7 @@ export default function JourneyPage({
                 name="title"
                 required
                 autoFocus
-                maxLength={100}
+                maxLength={150}
                 placeholder={
                   modal === "screen"
                     ? "e.g. Create project"
@@ -317,9 +331,21 @@ export default function JourneyPage({
                 }
               />
             </Field>
+            {modal === "screen" && (
+              <Field
+                label="First screenshot"
+                hint="Optional PNG, JPEG, or WebP up to 5 MB. If selected, it becomes Version 1."
+              >
+                <input
+                  name="image"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                />
+              </Field>
+            )}
             <p className="muted">
               {modal === "screen"
-                ? "A placeholder gives your idea a home. Open the screen to upload its first screenshot."
+                ? "Without a screenshot, Version 1 is an editable placeholder. Open the screen later to upload, replace, or remove its image."
                 : "Keep each journey focused on a goal your users want to accomplish."}
             </p>
             <ErrorNotice error={error} />

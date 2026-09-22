@@ -1,12 +1,36 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "custombacklog",
-  "main": ".open-next/worker.js",
-  "compatibility_date": "2026-09-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {"directory": ".open-next/assets", "binding": "ASSETS"},
-  "d1_databases": [{"binding": "DB", "database_name": "custombacklog", "database_id": "replace-with-your-d1-id", "migrations_dir":"migrations"}],
-  "r2_buckets": [{"binding":"SCREENSHOTS", "bucket_name":"custombacklog-screenshots"}],
-  "vars": {"APP_URL":"http://localhost:8787", "STORAGE_TARGET":"cloudflare"},
-  "observability": {"enabled": true}
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "custombacklog",
+	"main": ".open-next/worker.js",
+	"compatibility_date": "2026-09-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"preview_urls": false,
+	"assets": {
+		"directory": ".open-next/assets",
+		"binding": "ASSETS"
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "custombacklog",
+			"database_id": "ad86823f-270b-456f-bf2a-38e5daeee3d5",
+			"migrations_dir": "migrations",
+			"remote": true
+		}
+	],
+	"r2_buckets": [
+		{
+			"binding": "SCREENSHOTS",
+			"bucket_name": "custombacklog-screenshots"
+		}
+	],
+	"vars": {
+		"APP_URL": "https://custombacklog.medimemhamdi18.workers.dev",
+		"STORAGE_TARGET": "cloudflare"
+	},
+	"observability": {
+		"enabled": true
+	}
 }

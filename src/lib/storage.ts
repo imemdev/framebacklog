@@ -4,7 +4,6 @@ export type Bindings = {
   SCREENSHOTS: R2Bucket;
   APP_URL?: string;
   BETTER_AUTH_SECRET?: string;
-  SETUP_TOKEN?: string;
 };
 export async function bindings(): Promise<Bindings | null> {
   if (
@@ -21,7 +20,6 @@ export async function settings() {
   return {
     url: env?.APP_URL || process.env.APP_URL || "http://localhost:3000",
     secret: env?.BETTER_AUTH_SECRET || process.env.BETTER_AUTH_SECRET,
-    setup: env?.SETUP_TOKEN || process.env.SETUP_TOKEN,
   };
 }
 export async function sql<T = Record<string, unknown>>(
@@ -61,4 +59,14 @@ export async function getFile(key: string) {
   }
   const { getLocal } = await import("@/lib/local");
   return getLocal(key);
+}
+export async function deleteFile(key: string) {
+  if (!/^[a-zA-Z0-9-]+$/.test(key)) throw new Error("Invalid file key");
+  const env = await bindings();
+  if (env) {
+    await env.SCREENSHOTS.delete(key);
+    return;
+  }
+  const { deleteLocal } = await import("@/lib/local");
+  await deleteLocal(key);
 }

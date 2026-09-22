@@ -1377,9 +1377,53 @@ details[open] > summary {
 .connections-list span {
   font-size: 11px;
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 .connections-list input {
   width: 180px;
+}
+.connection-direction {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  margin: 4px 0 18px;
+  background: #f4f7fc;
+  border: 1px solid #dfe7f2;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.connection-direction strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.connection-direction span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.connection-direction button {
+  justify-self: start;
+  min-height: 34px;
+  font-size: 11px;
+}
+.screen-management form {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.screen-management form .field {
+  flex: 1;
+  min-width: 0;
+}
+.screen-management form button,
+.screen-management > button {
+  font-size: 11px;
+}
+.screen-management > button {
+  margin-top: 12px;
 }
 .conflict-actions {
   padding: 12px;

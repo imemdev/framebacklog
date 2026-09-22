@@ -1,16 +1,46 @@
 # FrameBacklog
 
-A small, open-source workspace for developers, nontechnical reviewers, and external coding assistants. Persistent task planning, a visual screen journey, versioned screen feedback, and human review—all without an embedded chatbot or LLM subscription.
+> A calm, shared workspace for planning work, building product journeys, and collecting human feedback.
 
-**Initial release:** working Node/SQLite and locally verified Cloudflare Workers/D1/R2 application. Cloudflare live deployment and Docker container execution are not verified in this environment. See [verification](docs/VERIFICATION.md) and [limitations](docs/LIMITATIONS.md).
+<p align="center">
+  <a href="https://custombacklog.medimemhamdi18.workers.dev/">
+    <img src="docs/assets/framebacklog-live.png" alt="FrameBacklog live sign-in screen" width="100%">
+  </a>
+</p>
 
-Previously named CustomBacklog. The visible name is configurable with `NEXT_PUBLIC_APP_NAME`; existing `CUSTOMBACKLOG_*` integration variables and storage identifiers remain supported.
+<p align="center">
+  <a href="https://custombacklog.medimemhamdi18.workers.dev/">Open the live workspace ↗</a>
+  ·
+  <a href="https://custombacklog.medimemhamdi18.workers.dev/guide">Read the in-app guide ↗</a>
+  ·
+  <a href="https://github.com/imemdev/framebacklog">View the source ↗</a>
+</p>
 
-Public in-app connection guide: `/guide` (also linked beside sign-in).
+FrameBacklog keeps the product conversation in one place: a backlog for requirements, a visual screen journey for what users see, versioned screenshots for review, and a secure REST API for coding assistants. It does not require an embedded chatbot or an LLM subscription.
+
+The project was previously named **CustomBacklog**. The visible application name is configurable with `NEXT_PUBLIC_APP_NAME`; existing `CUSTOMBACKLOG_*` integration variables and storage identifiers remain supported.
+
+## What it helps with
+
+- **Plan** — organize projects, ideas, tasks, acceptance criteria, priorities, dependencies, and assignees.
+- **Build** — map a user journey on a visual canvas, connect screens in an intentional direction, and play the journey at one second per screen.
+- **Review** — upload, replace, or remove screen images; keep screenshot versions; add pinned feedback; and record human review decisions.
+- **Collaborate** — invite a partner with project-scoped permissions and keep each project private by default.
+- **Automate** — create a project-scoped API token and use the REST API or the local MCP adapter without exposing browser sessions.
+
+## Live deployment
+
+The current public deployment runs on Cloudflare Workers with Cloudflare D1 for structured data and R2 for screenshot files:
+
+- **Application:** [custombacklog.medimemhamdi18.workers.dev](https://custombacklog.medimemhamdi18.workers.dev/)
+- **User guide:** [live `/guide` page](https://custombacklog.medimemhamdi18.workers.dev/guide)
+- **OpenAPI document:** [live `/api/openapi` endpoint](https://custombacklog.medimemhamdi18.workers.dev/api/openapi)
+
+The production root and OpenAPI endpoint have been smoke-tested after deployment. Cloudflare usage limits and billing remain account-level responsibilities.
 
 ## Start locally
 
-Use Node 24.15+ (Node 26.8.2 used for local verification) and pnpm 11.19.0.
+Use Node 24.15+ and pnpm 11.19.0. Node 26.8.2 was used for the current local verification.
 
 ```sh
 git clone https://github.com/imemdev/framebacklog.git
@@ -20,58 +50,96 @@ pnpm install --frozen-lockfile
 cp .env.example .env.local
 ```
 
-Set `BETTER_AUTH_SECRET` and `SETUP_TOKEN` to different randomly generated values of at least 32 characters. Generate each with `openssl rand -hex 32`. Keep `.env.local` private. Set `APP_URL` to the exact browser origin.
+Set `BETTER_AUTH_SECRET` to a random value of at least 32 characters and keep `.env.local` private:
 
 ```sh
-pnpm db:migrate
-pnpm dev
+openssl rand -hex 32
 ```
 
-Open http://localhost:3000. Create the owner using your installation setup token. Setup closes after the first owner. Create a project; invite a partner under **Settings → People**. Partners see only projects explicitly assigned by the owner, with individually selected actions. AI tokens see only their assigned project.
-
-For a production Node run, set the environment variables and use `pnpm build && pnpm start` (the start script prepares and launches the standalone output). The equivalent manual procedure is:
+Then start the guided local launcher:
 
 ```sh
-pnpm build
-cp -R .next/static .next/standalone/.next/static
-cp -R public migrations .next/standalone/
-# Set APP_URL, BETTER_AUTH_SECRET, SETUP_TOKEN and an absolute DATA_DIR in the environment.
-cd .next/standalone
-node server.js
+./scripts/framebacklog.sh
 ```
 
-## Separate demo
+The launcher applies SQLite migrations, starts the development server, and opens [http://localhost:3000](http://localhost:3000) when the app is ready. Keep that terminal open and press **Ctrl+C** to stop the server and its child processes.
 
-The demo seed refuses to run unless `DATA_DIR` contains `demo`, and refuses to modify an initialized installation. It creates six raster example screens, a branching journey, all task states, a blocked task, comments and version-specific reviews. Demo completion records explicitly say they are examples.
+The first person to register becomes the owner. The owner can create a project and invite a partner from **Settings → People**. To use fixed local credentials, set `LOCAL_OWNER_USERNAME` and `LOCAL_OWNER_PASSWORD` in the private `.env.local`; the launcher will create or update that local owner while retaining project data.
+
+## Product flow
+
+| Stage | What happens |
+| --- | --- |
+| **Plan** | Capture ideas and turn them into tasks with priorities, dependencies, acceptance criteria, and assignees. |
+| **Build** | Add screens, optionally place the first screenshot directly in Version 1, and connect screens on the journey canvas. |
+| **Review** | Replace or remove images, keep version-specific feedback, approve a screen, or request changes. |
+| **Share** | Give a partner only the project actions they need, or create a scoped token for an external assistant. |
+
+## Architecture
+
+```text
+Browser
+  │
+  ▼
+Next.js application
+  │
+  ├─ Local mode       → SQLite + local screenshot files
+  │
+  └─ Cloudflare mode  → Worker + D1 metadata + R2 screenshots
+                         └─ REST API / OpenAPI / MCP adapter
+```
+
+The same domain model is used locally and in the Cloudflare deployment. Server-side authorization checks project membership and action grants before every protected mutation. Screenshot replacement and deletion clean up the associated object after the metadata update succeeds.
+
+## Cloudflare deployment
+
+After configuring Wrangler, D1, R2, and the production `APP_URL`, build and deploy the OpenNext worker:
 
 ```sh
-pnpm exec playwright install chromium
-DATA_DIR=.data/demo DEMO_PASSWORD='<choose-12-or-more-characters>' \
-BETTER_AUTH_SECRET='<your-random-demo-session-secret>' pnpm demo
-DATA_DIR=.data/demo BETTER_AUTH_SECRET='<same-demo-session-secret>' pnpm dev
+pnpm cf:build
+pnpm exec opennextjs-cloudflare deploy
 ```
 
-Sign in as `owner` or `partner` using your chosen demo password. Never seed demo data into a real workspace.
+The repository configuration uses the `DB` D1 binding for application data and the `SCREENSHOTS` R2 binding for uploaded images. Never commit `.env.local`, API secrets, private screenshots, databases, or browser authentication state.
 
 ## Use an external assistant
 
-Under **Settings → AI access**, create a named project-scoped token, copy its secret once, and download the secret-free connection kit. Test connection before leaving the secret screen.
+Under **Settings → AI access**, create a named project-scoped token, copy its secret once, and download the secret-free connection kit. Test the connection before leaving the secret screen.
 
-- [Agent quick-start](docs/AGENT_QUICKSTART.md): small consumer guide; no codebase inspection required.
-- [People guide](docs/USER_GUIDE.md): backlog, review, journeys, and invitations.
-- Live OpenAPI: `/api/openapi`. Shared Zod request schemas feed the specification.
-- [MCP stdio adapter](mcp/README.md): local process using REST bearer authentication.
-- [Maintainer guide](docs/MAINTAINER.md): architecture, migrations, deployment, backups, and tests.
+- [Agent quick-start](docs/AGENT_QUICKSTART.md) — a small consumer guide.
+- [People and product guide](docs/USER_GUIDE.md) — backlog, review, journeys, and invitations.
+- [MCP stdio adapter](mcp/README.md) — a local process using REST bearer authentication.
+- [Maintainer guide](docs/MAINTAINER.md) — architecture, migrations, deployment, backups, and tests.
 
-## Verify
+## Verify changes
+
+Run the core checks before publishing a change:
 
 ```sh
 pnpm typecheck
 pnpm test
+pnpm format:check
 pnpm build
 pnpm cf:build
 ```
 
-Run `pnpm test:e2e` against a separately seeded demo at `TEST_URL` (default localhost:3000), with `DEMO_PASSWORD` set. Tests intentionally create tasks and screen versions. `node scripts/contracts.mjs` exercises REST and MCP against an isolated server at `TEST_URL` (default localhost:3001). Configure `TEST_EMAIL`, `TEST_PASSWORD`, and `SETUP_TOKEN`; it creates the first owner only when setup is open. Do not run mutation suites against a real workspace.
+For the isolated mutation suites, use a disposable data directory and never run them against a real workspace:
 
-The working name is configured with `NEXT_PUBLIC_APP_NAME` at build time. MIT licensed. No required paid identity, email, AI, queue, or real-time service.
+```sh
+pnpm test:e2e
+node scripts/contracts.mjs
+```
+
+The separate demo seed is deliberately restricted to a data directory containing `demo`; it must not be used with a real installation.
+
+## Documentation
+
+- [Verification record](docs/VERIFICATION.md)
+- [Known limitations](docs/LIMITATIONS.md)
+- [Maintainer guide](docs/MAINTAINER.md)
+- [OpenAPI source](src/lib/openapi.ts)
+- [Generated OpenAPI document](docs/openapi.json)
+
+## License
+
+FrameBacklog is released under the MIT license.

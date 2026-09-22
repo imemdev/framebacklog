@@ -32,12 +32,27 @@ const keyParam = {
   required: true,
   schema: { type: "string" },
 };
+const versionParam = {
+  name: "versionId",
+  in: "path",
+  required: true,
+  schema: { type: "string" },
+  description: "Screen version UUID.",
+};
 const versionHeader = {
   name: "If-Match",
   in: "header",
   required: true,
   schema: { type: "integer" },
   description: "Current screen version number.",
+};
+const imageVersionHeader = {
+  name: "If-Match",
+  in: "header",
+  required: true,
+  schema: { type: "integer", minimum: 0 },
+  description:
+    "Current screen image revision. Fetch the screen again after a 409 conflict.",
 };
 const idem = {
   name: "Idempotency-Key",
@@ -423,6 +438,8 @@ const operations: Operation[] = [
     id: "create_screen",
     parameters: [{ ...idem, required: false }],
     summary: "Create placeholder screen (upload permission)",
+    description:
+      "The JSON form creates an empty Version 1. A multipart form may include an optional image so Version 1 is populated immediately.",
     schema: {
       type: "object",
       required: ["title"],
@@ -441,6 +458,23 @@ const operations: Operation[] = [
     },
   },
   {
+    method: "patch",
+    path: "/projects/{projectId}/screens/{id}",
+    id: "rename_screen",
+    summary: "Rename a screen (upload permission)",
+    schema: z.toJSONSchema(
+      z.object({ title: z.string().trim().min(1).max(150) }),
+      { io: "input" },
+    ),
+  },
+  {
+    method: "delete",
+    path: "/projects/{projectId}/screens/{id}",
+    id: "delete_screen",
+    summary:
+      "Delete a screen, remove its journey/task/comment relationships, and delete its private images",
+  },
+  {
     method: "post",
     path: "/projects/{projectId}/screens/{id}/versions",
     id: "upload_screen_version",
@@ -448,11 +482,27 @@ const operations: Operation[] = [
     parameters: [versionHeader],
   },
   {
+    method: "put",
+    path: "/projects/{projectId}/screens/{id}/versions/{versionId}/image",
+    id: "replace_screen_image",
+    summary:
+      "Add, replace, or re-upload the image for an existing screen version; maximum 5 MB",
+    parameters: [imageVersionHeader],
+  },
+  {
+    method: "delete",
+    path: "/projects/{projectId}/screens/{id}/versions/{versionId}/image",
+    id: "remove_screen_image",
+    summary:
+      "Remove the image from an existing screen version while keeping its version and feedback history",
+    parameters: [imageVersionHeader],
+  },
+  {
     method: "post",
     path: "/projects/{projectId}/screens/{id}/review",
     id: "human_review_screen",
     summary:
-      "Human owner or partner only: decision belongs to one immutable version",
+      "Human owner or partner only: decision belongs to one screen version",
     schema: {
       type: "object",
       required: ["versionId", "decision", "reviewVersion"],
@@ -546,6 +596,7 @@ export function openapi() {
       parameters: [
         ...(o.path.includes("{projectId}") ? [projectParam] : []),
         ...(o.path.includes("{id}") ? [keyParam] : []),
+        ...(o.path.includes("{versionId}") ? [versionParam] : []),
         ...(o.parameters || []),
       ],
       ...(o.schema
@@ -555,7 +606,7 @@ export function openapi() {
               content: { "application/json": { schema: o.schema } },
             },
           }
-        : o.id === "upload_screen_version"
+        : ["upload_screen_version", "replace_screen_image"].includes(o.id)
           ? {
               requestBody: {
                 required: true,

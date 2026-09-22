@@ -60,7 +60,7 @@ await page.clock.fastForward(9000);
 await expect(current.getByRole("heading")).toHaveText(title(0));
 await page.getByRole("button", { name: "Resume", exact: true }).click();
 await page.getByLabel("Playback speed").selectOption("0.5");
-await page.clock.fastForward(7000);
+await page.clock.fastForward(1000);
 await expect(current.getByRole("heading")).toHaveText(title(0));
 await page.clock.fastForward(1001);
 await expect(current.getByRole("heading")).toHaveText(title(1));

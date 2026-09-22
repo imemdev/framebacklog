@@ -73,7 +73,6 @@ if (install.setupRequired)
       name: "Contract owner",
       email,
       password,
-      token: process.env.SETUP_TOKEN || "contract-setup-token",
     },
   });
 cookie = await signIn(email, password);
@@ -82,7 +81,6 @@ await req("setup", {
     name: "Intruder",
     email: "intruder@example.test",
     password,
-    token: process.env.SETUP_TOKEN || "contract-setup-token",
   },
   expected: 409,
 });
@@ -294,6 +292,37 @@ const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/l9sAAAAASUVORK5CYII=",
   "base64",
 );
+const firstImage = await req(
+  `${path}/screens/${screen.id}/versions/${screen.versions[0].id}/image`,
+  {
+    method: "PUT",
+    raw: png,
+    bearer: ai,
+    headers: { "Content-Type": "image/png", "If-Match": "0" },
+    expected: 200,
+  },
+);
+assert.ok(firstImage.key);
+const replacementImage = await req(
+  `${path}/screens/${screen.id}/versions/${screen.versions[0].id}/image`,
+  {
+    method: "PUT",
+    raw: png,
+    bearer: ai,
+    headers: { "Content-Type": "image/png", "If-Match": "1" },
+    expected: 200,
+  },
+);
+assert.notEqual(replacementImage.key, firstImage.key);
+await req(
+  `${path}/screens/${screen.id}/versions/${screen.versions[0].id}/image`,
+  {
+    method: "DELETE",
+    bearer: ai,
+    headers: { "If-Match": "2" },
+    expected: 200,
+  },
+);
 const version = await req(`${path}/screens/${screen.id}/versions`, {
   method: "POST",
   raw: png,
@@ -455,6 +484,15 @@ assert.deepEqual(
   ),
   png,
 );
+await req(`${path}/screens/${screen.id}`, {
+  method: "PATCH",
+  data: { title: "Renamed screen" },
+  bearer: ai,
+});
+const renamed = await req(`${path}/screens/${screen.id}`, { bearer: ai });
+assert.equal(renamed.title, "Renamed screen");
+await req(`${path}/screens/${screen.id}`, { method: "DELETE", bearer: ai });
+await req(`${path}/screens/${screen.id}`, { bearer: ai, expected: 404 });
 const bad = structuredClone(exported);
 bad.files["../../evil"] = "a";
 await req(`${path}/import`, { data: bad, expected: 422 });
@@ -533,6 +571,8 @@ const result = {
     "human-only task review",
     "changes return to In progress",
     "version-specific screen review",
+    "screen image add/replace/remove",
+    "screen rename/delete relationship cleanup",
     "screen review conflicts",
     "pinned comments and replies",
     "comment task deduplication",

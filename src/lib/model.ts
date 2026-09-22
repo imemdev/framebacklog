@@ -62,6 +62,9 @@ export const commentInput = z
       .optional(),
   })
   .strict();
+export const screenTitleInput = z
+  .object({ title: z.string().trim().min(1).max(150) })
+  .strict();
 export const layoutInput = z
   .object({
     version: z.number().int().positive(),
@@ -132,9 +135,14 @@ export type Screen = {
   id: string;
   title: string;
   versions: ScreenVersion[];
+  /** Optimistic revision for adding, replacing, or removing version images. */
+  imageVersion?: number;
   recommendation?: { versionId: string; actor: string; at: string };
   recommendationVersion?: number;
 };
+export function screenImageVersion(screen: Screen) {
+  return screen.imageVersion ?? 0;
+}
 export function screenVersions(screen: Screen) {
   const versions = screen.versions.toReversed();
   const preferred = versions.find(

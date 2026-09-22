@@ -48,7 +48,7 @@ export default function JourneyPlayer({
         setCurrent(nextId);
         setVisited((v) => [...v, nextId]);
       },
-      4000 / Number(speed),
+      1000 / Number(speed),
     );
     return () => window.clearTimeout(timer);
   }, [playing, current, nextId, speed, restartCount]);
@@ -111,7 +111,7 @@ export default function JourneyPlayer({
               : choice
                 ? "Paused · Choose your next screen"
                 : playing
-                  ? `Playing · ${4 / Number(speed)} seconds per screen`
+                  ? `Playing · ${1 / Number(speed)} seconds per screen`
                   : "Paused"}
         </p>
         {screen && (

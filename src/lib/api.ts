@@ -12,7 +12,7 @@ import {
 import { z } from "zod";
 import { actor, auth, csrf, digest, limit, secret } from "./auth";
 import { body, failure, imageType, json, readBytes } from "./http";
-import { getFile, putFile, settings, sql } from "./storage";
+import { deleteFile, getFile, putFile, settings, sql } from "./storage";
 import { mutate, readProject } from "./repository";
 import {
   authorize,
@@ -34,6 +34,8 @@ import {
   progressInput,
   reviewInput,
   reviewTask,
+  screenImageVersion,
+  screenTitleInput,
   taskInput,
   assertVersion,
   type Project,
@@ -58,7 +60,7 @@ const accountInput = z
       .transform((v) => v.toLowerCase())
       .optional(),
     password: z.string().min(3).max(128),
-    token: z.string().min(1).max(200),
+    token: z.string().min(1).max(200).optional(),
   })
   .strict()
   .refine(
@@ -76,6 +78,27 @@ const compact = (t: Project["tasks"][number]) => ({
   blockerReason: t.blockerReason,
   screenIds: t.screenIds,
 });
+const screenCreateInput = z
+  .object({
+    title: z.string().trim().min(1).max(150),
+    journeyId: z.string().optional(),
+    position: z
+      .object({
+        x: z.number().min(-100000).max(100000),
+        y: z.number().min(-100000).max(100000),
+      })
+      .optional(),
+  })
+  .strict();
+function imageRevision(req: Request) {
+  const value = Number(req.headers.get("if-match"));
+  if (!Number.isInteger(value) || value < 0)
+    throw new Problem(
+      422,
+      "If-Match must contain the current screen image revision number.",
+    );
+  return value;
+}
 export async function handle(req: Request) {
   try {
     return await dispatch(req);
@@ -96,7 +119,10 @@ async function dispatch(req: Request): Promise<Response> {
     const session = req.headers.has("cookie")
       ? await (await auth()).api.getSession({ headers: req.headers })
       : null;
-    return json({ setupRequired: !rows.length, authenticated: !!session });
+    return json({
+      setupRequired: !rows.length,
+      authenticated: !!session,
+    });
   }
   if ((path[0] === "setup" || path[0] === "join") && method === "POST") {
     await limit("registration", 10);
@@ -109,13 +135,8 @@ async function dispatch(req: Request): Promise<Response> {
       name: input.name || input.username || input.email!.split("@")[0],
     };
     let reservation = false;
+    let invitationHash: string | undefined;
     if (path[0] === "setup") {
-      const config = await settings();
-      if (
-        !config.setup ||
-        (await digest(data.token)) !== (await digest(config.setup))
-      )
-        throw new Problem(403, "The installation setup token is incorrect.");
       const rows = await sql(
         "INSERT INTO installation(id,email) VALUES(1,?) ON CONFLICT(id) DO NOTHING RETURNING id",
         [data.email],
@@ -124,9 +145,12 @@ async function dispatch(req: Request): Promise<Response> {
         throw new Problem(409, "Owner setup is already closed.");
       reservation = true;
     } else {
+      if (!data.token)
+        throw new Problem(403, "An invitation token is required.");
+      invitationHash = await digest(data.token);
       const rows = await sql(
         "UPDATE invitations SET consumed=1 WHERE hash=? AND email=? AND expires>? AND consumed=0 RETURNING hash",
-        [await digest(data.token), data.email, Date.now()],
+        [invitationHash, data.email, Date.now()],
       );
       if (!rows.length)
         throw new Problem(
@@ -152,7 +176,7 @@ async function dispatch(req: Request): Promise<Response> {
       if (!reservation) {
         const [access] = await sql<{ grants: string }>(
           "SELECT grants FROM invitation_access WHERE hash=?",
-          [await digest(data.token)],
+          [invitationHash!],
         );
         await sql("INSERT INTO partner_access(user_id,grants) VALUES(?,?)", [
           result.user.id,
@@ -167,7 +191,7 @@ async function dispatch(req: Request): Promise<Response> {
         ]);
       else
         await sql("UPDATE invitations SET consumed=0 WHERE hash=?", [
-          await digest(data.token),
+          invitationHash!,
         ]);
       throw e;
     }
@@ -457,55 +481,270 @@ async function dispatch(req: Request): Promise<Response> {
   }
   if (resource === "screens" && method === "POST" && !key) {
     authorize(a, projectId, "upload");
-    const d = z
-      .object({
-        title: z.string().trim().min(1).max(150),
-        journeyId: z.string().optional(),
-        position: z
-          .object({
-            x: z.number().min(-100000).max(100000),
-            y: z.number().min(-100000).max(100000),
-          })
-          .optional(),
-      })
-      .parse(await body(req));
+    let d: z.infer<typeof screenCreateInput>;
+    let initial: { key: string; type: string } | undefined;
+    if (req.headers.get("content-type")?.startsWith("multipart/form-data")) {
+      const form = await req.formData();
+      const rawPosition = form.get("position");
+      let position: unknown;
+      if (typeof rawPosition === "string" && rawPosition) {
+        try {
+          position = JSON.parse(rawPosition);
+        } catch {
+          throw new Problem(400, "The screen position must be valid JSON.");
+        }
+      }
+      d = screenCreateInput.parse({
+        title: form.get("title"),
+        journeyId:
+          typeof form.get("journeyId") === "string"
+            ? form.get("journeyId") || undefined
+            : undefined,
+        position,
+      });
+      const image = form.get("image");
+      if (image instanceof File && image.size > 0) {
+        if (image.size > 5 * 1024 * 1024)
+          throw new Problem(413, "Choose an image smaller than 5 MB.");
+        const bytes = new Uint8Array(await image.arrayBuffer());
+        const type = imageType(bytes);
+        const fileKey = id();
+        await putFile(fileKey, bytes, type);
+        initial = { key: fileKey, type };
+      }
+    } else d = screenCreateInput.parse(await body(req));
+    try {
+      return json(
+        await mutate(
+          projectId,
+          a,
+          (p) => {
+            if (p.screens.length >= 100)
+              throw new Problem(422, "Limit: 100 screens per project.");
+            const screen = {
+              id: id(),
+              title: d.title,
+              imageVersion: 0,
+              versions: [
+                {
+                  id: id(),
+                  number: 1,
+                  ...(initial || {}),
+                  status: "Awaiting review" as const,
+                  createdAt: now(),
+                  reviews: [],
+                },
+              ],
+            };
+            p.screens.push(screen);
+            const j = p.journeys.find((j) => j.id === d.journeyId);
+            if (j) {
+              j.nodes.push({
+                id: screen.id,
+                screenId: screen.id,
+                position: d.position ?? { x: j.nodes.length * 300, y: 100 },
+              });
+              j.version++;
+            }
+            event(p, a, "Screen created", screen.id, d.title);
+            return screen;
+          },
+          !initial && req.headers.has("idempotency-key")
+            ? await receipt(d)
+            : undefined,
+        ),
+        201,
+      );
+    } catch (error) {
+      if (initial) {
+        try {
+          await deleteFile(initial.key);
+        } catch (cleanupError) {
+          console.error(
+            "Could not clean up an unreferenced initial screen image:",
+            cleanupError instanceof Error ? cleanupError.message : "unknown",
+          );
+        }
+      }
+      throw error;
+    }
+  }
+  if (resource === "screens" && key && !path[4] && method === "PATCH") {
+    authorize(a, projectId, "upload");
+    const d = screenTitleInput.parse(await body(req));
     return json(
-      await mutate(
-        projectId,
-        a,
-        (p) => {
-          if (p.screens.length >= 100)
-            throw new Problem(422, "Limit: 100 screens per project.");
-          const screen = {
-            id: id(),
-            title: d.title,
-            versions: [
-              {
-                id: id(),
-                number: 1,
-                status: "Awaiting review" as const,
-                createdAt: now(),
-                reviews: [],
-              },
-            ],
-          };
-          p.screens.push(screen);
-          const j = p.journeys.find((j) => j.id === d.journeyId);
-          if (j) {
-            j.nodes.push({
-              id: screen.id,
-              screenId: screen.id,
-              position: d.position ?? { x: j.nodes.length * 300, y: 100 },
-            });
-            j.version++;
-          }
-          event(p, a, "Screen created", screen.id, d.title);
-          return screen;
-        },
-        req.headers.has("idempotency-key") ? await receipt(d) : undefined,
-      ),
-      201,
+      await mutate(projectId, a, (p) => {
+        const screen = p.screens.find((s) => s.id === key);
+        if (!screen) throw new Problem(404, "Screen not found.");
+        screen.title = d.title;
+        event(p, a, "Screen renamed", screen.id, d.title);
+        return screen;
+      }),
     );
+  }
+  if (resource === "screens" && key && !path[4] && method === "DELETE") {
+    authorize(a, projectId, "upload");
+    let fileKeys: string[] = [];
+    const result = await mutate(projectId, a, (p) => {
+      const screen = p.screens.find((s) => s.id === key);
+      if (!screen) throw new Problem(404, "Screen not found.");
+      fileKeys = screen.versions.flatMap((v) => (v.key ? [v.key] : []));
+      const removedCommentIds = new Set(
+        p.comments.filter((c) => c.screenId === key).map((c) => c.id),
+      );
+      p.comments = p.comments.filter((c) => c.screenId !== key);
+      p.screens = p.screens.filter((s) => s.id !== key);
+      for (const journey of p.journeys) {
+        const removedNodes = new Set(
+          journey.nodes
+            .filter((node) => node.screenId === key)
+            .map((node) => node.id),
+        );
+        if (!removedNodes.size) continue;
+        journey.nodes = journey.nodes.filter(
+          (node) => !removedNodes.has(node.id),
+        );
+        journey.edges = journey.edges.filter(
+          (edge) =>
+            !removedNodes.has(edge.source) && !removedNodes.has(edge.target),
+        );
+        journey.version++;
+      }
+      for (const task of p.tasks) {
+        const hadScreen = task.screenIds.includes(key);
+        const hadComment =
+          !!task.sourceCommentId && removedCommentIds.has(task.sourceCommentId);
+        if (!hadScreen && !hadComment) continue;
+        task.screenIds = task.screenIds.filter((id) => id !== key);
+        if (hadComment) task.sourceCommentId = undefined;
+        task.version++;
+        task.updatedAt = now();
+        event(p, a, "Screen unlinked from task", task.id, screen.title);
+      }
+      event(p, a, "Screen deleted", key, screen.title);
+      return { ok: true };
+    });
+    for (const fileKey of fileKeys) {
+      try {
+        await deleteFile(fileKey);
+      } catch (error) {
+        console.error(
+          "Could not clean up a deleted screen image:",
+          error instanceof Error ? error.message : "unknown",
+        );
+      }
+    }
+    return json(result);
+  }
+  if (
+    resource === "screens" &&
+    path[4] === "versions" &&
+    path[5] &&
+    path[6] === "image" &&
+    (method === "PUT" || method === "DELETE")
+  ) {
+    authorize(a, projectId, "upload");
+    const expectedImageVersion = imageRevision(req);
+    const { project: current } = await readProject(projectId, a);
+    const currentScreen = current.screens.find((s) => s.id === key);
+    const currentVersion = currentScreen?.versions.find(
+      (v) => v.id === path[5],
+    );
+    if (!currentScreen || !currentVersion)
+      throw new Problem(404, "Screen version not found.");
+    assertVersion(screenImageVersion(currentScreen), expectedImageVersion);
+    if (method === "PUT") {
+      const bytes = await readBytes(req, 5 * 1024 * 1024);
+      const type = imageType(bytes);
+      const fileKey = id();
+      await putFile(fileKey, bytes, type);
+      let previousKey: string | undefined;
+      try {
+        const result = await mutate(projectId, a, (p) => {
+          const screen = p.screens.find((s) => s.id === key);
+          const version = screen?.versions.find((v) => v.id === path[5]);
+          if (!screen || !version)
+            throw new Problem(404, "Screen version not found.");
+          assertVersion(screenImageVersion(screen), expectedImageVersion);
+          previousKey = version.key;
+          version.key = fileKey;
+          version.type = type;
+          version.status = "Awaiting review";
+          screen.imageVersion = screenImageVersion(screen) + 1;
+          event(
+            p,
+            a,
+            "Screen image updated",
+            screen.id,
+            `Version ${version.number}`,
+          );
+          return version;
+        });
+        if (previousKey) {
+          try {
+            await deleteFile(previousKey);
+          } catch (error) {
+            console.error(
+              "Could not clean up the replaced screen image:",
+              error instanceof Error ? error.message : "unknown",
+            );
+          }
+        }
+        return json(result);
+      } catch (error) {
+        try {
+          await deleteFile(fileKey);
+        } catch (cleanupError) {
+          console.error(
+            "Could not clean up an unreferenced replacement image:",
+            cleanupError instanceof Error ? cleanupError.message : "unknown",
+          );
+        }
+        throw error;
+      }
+    }
+    let previousKey: string | undefined;
+    const result = await mutate(projectId, a, (p) => {
+      const screen = p.screens.find((s) => s.id === key);
+      const version = screen?.versions.find((v) => v.id === path[5]);
+      if (!screen || !version)
+        throw new Problem(404, "Screen version not found.");
+      assertVersion(screenImageVersion(screen), expectedImageVersion);
+      if (!version.key)
+        return {
+          ok: true,
+          removed: false,
+          imageVersion: screenImageVersion(screen),
+        };
+      previousKey = version.key;
+      version.key = undefined;
+      version.type = undefined;
+      version.status = "Awaiting review";
+      screen.imageVersion = screenImageVersion(screen) + 1;
+      event(
+        p,
+        a,
+        "Screen image removed",
+        screen.id,
+        `Version ${version.number}`,
+      );
+      return {
+        ok: true,
+        removed: true,
+        imageVersion: screen.imageVersion,
+      };
+    });
+    if (previousKey) {
+      try {
+        await deleteFile(previousKey);
+      } catch (error) {
+        console.error(
+          "Could not clean up the removed screen image:",
+          error instanceof Error ? error.message : "unknown",
+        );
+      }
+    }
+    return json(result);
   }
   if (resource === "screens" && path[4] === "versions" && method === "POST") {
     authorize(a, projectId, "upload");

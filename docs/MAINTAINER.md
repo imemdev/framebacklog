@@ -4,13 +4,13 @@
 
 One real Next.js App Router application. The page/layout are Server Components; the interactive workspace, dialogs, backlog and review panels are focused client modules. Journey and React Flow load dynamically. Route handlers expose the shared service layer at `/api/v1`; MCP uses REST only. Hosting imports are confined to `src/lib/storage.ts` and `src/lib/local.ts` and never enter client code.
 
-The initial edition intentionally uses **bounded project aggregates** in SQLite/D1, rather than an ORM transaction callback that D1 cannot execute. Each project row holds versioned tasks, dependencies, screens, immutable screenshot version metadata, comment threads/pins, review histories, journey nodes/edges, recent activity and idempotency receipts. Users, Better Auth sessions/accounts, installation lock, membership, invitations, API credentials and rate counters have separate indexed tables.
+The initial edition intentionally uses **bounded project aggregates** in SQLite/D1, rather than an ORM transaction callback that D1 cannot execute. Each project row holds versioned tasks, dependencies, screens, editable screenshot-version metadata, comment threads/pins, review histories, journey nodes/edges, recent activity and idempotency receipts. Users, Better Auth sessions/accounts, installation lock, membership, invitations, API credentials and rate counters have separate indexed tables.
 
 A mutation reads project revision N, validates authorization and domain rules, updates an in-memory copy, then performs one `UPDATE projects SET data=?, revision=revision+1 WHERE id=? AND revision=? RETURNING revision`. The content, review/activity event and idempotency receipt commit in the **same SQL statement**. A competing writer returns no row and becomes 409; no silent retry overwrites user work. SQLite uses WAL and a five-second busy timeout. D1 executes the same single atomic statement; no `BEGIN` or interactive transaction is assumed. Real simultaneous requests were tested on both backends.
 
 Project aggregate tradeoffs: coarse conflicts even on different tasks, no full-text SQL indexing, and bounded capacity. Metadata maximum: 1.5 MB (below D1's 2 MB row limit). Tasks: 500/project; screenshots: 100 screens × up to 20 versions; journeys: 20, each up to 100 nodes/300 edges; screen comments: 1,000/project; task comments: 100/task. Retain latest 1,000 activity events and 24-hour idempotency receipts. Task/screen review histories persist separately from the truncated change feed. Owners can delete tasks in any status; the change feed emits a Task deleted event with the deleted ID. Dependency references are removed and affected task versions advance. Project deletion and archival are not included. Credentials can be revoked and partner access removed.
 
-File storage uses UUID keys, private local files or a private R2 bucket. Uploads stream into a bounded buffer, validate raster signatures and size, and never invoke an image conversion service. Database and blob storage do not share a transaction: a failed metadata CAS can leave an unreferenced immutable blob; it is not exposed because retrieval requires a matching project/version record. Backups must include both. No object deletion is performed automatically.
+File storage uses UUID keys, private local files or a private R2 bucket. Uploads stream into a bounded buffer, validate raster signatures and size, and never invoke an image conversion service. Database and blob storage do not share a transaction: a failed metadata CAS can leave an unreferenced blob; it is not exposed because retrieval requires a matching project/version record. Successful image replacement/removal and screen deletion clean up their old referenced objects after the metadata CAS; cleanup failures are logged and do not roll back the already-saved aggregate. Backups must include both.
 
 ## Versions and compatibility
 
@@ -20,7 +20,7 @@ The Cloudflare build sets `CF_BUILD=1` and aliases the local Node adapter out of
 
 ## Authentication and authorization
 
-Better Auth supplies password hashing, sessions, secure cookie handling and origin protection. No bespoke password encryption/session cryptography. Application setup requires a separately configured installation token, atomically reserves the installation singleton, creates the first owner and closes setup. Invitation links contain 256-bit random bearer secrets; only SHA-256 hashes are stored, with a 24-hour expiry and atomic single-use reservation. Invitations are for partner accounts. Failed registration releases its reservation.
+Better Auth supplies password hashing, sessions, secure cookie handling and origin protection. No bespoke password encryption/session cryptography. In every environment, an uninitialized installation accepts its first owner's username and password directly; the first-owner reservation is atomic and closes setup after success. The `pnpm dev` server binds to `127.0.0.1`. Invitation links contain 256-bit random bearer secrets; only SHA-256 hashes are stored, with a 24-hour expiry and atomic single-use reservation. Invitations are for partner accounts. Failed registration releases its reservation.
 
 Only sign-in, sign-out and session lookup are exposed through the public Better Auth route. Registration must pass setup or invitation checks. The browser uses Better Auth’s username plugin. Usernames are case-insensitive, 3–40 letters/numbers/dots/underscores/hyphens; passwords have a minimum of 3 characters as requested for this installation. Setup and invitations accept usernames without requiring email; internal placeholder addresses satisfy Better Auth’s account schema. Legacy email API sign-in remains available for existing integrations. Existing accounts without usernames need a unique username assigned in the user table before using the username-only browser form. The instance uses seven-day sessions. HTTPS enables Secure cookies; matching APP_URL Origin is required for browser mutations. Deploy behind HTTPS; ensure proxy and APP_URL reflect the public origin. No password-reset email service, MFA, social login or email verification is included. Administrators must handle account recovery out of band; protect backups and installation access.
 
@@ -34,11 +34,13 @@ See the root README. Keep DATA_DIR outside the source tree for production and us
 
 There is no required LLM key. `NEXT_PUBLIC_APP_NAME` is the only public branding setting; rebuild after changing it. Never prefix credentials with NEXT_PUBLIC_. Credentials, .env files, databases, uploads and test browser session state are ignored by Git.
 
+The local launcher runs `scripts/ensure-local-owner.ts` after migrations. Optional private `LOCAL_OWNER_USERNAME` and `LOCAL_OWNER_PASSWORD` settings provision the first owner or synchronize the existing owner in SQLite. The script uses Better Auth password hashing, preserves the owner's ID and project data, and invalidates the owner's sessions only when credentials change. Both settings must be provided together; a username belonging to another account is rejected. Without either setting, normal first-owner registration remains available. This preparation is specific to the local launcher.
+
 ## Verification
 
 - `pnpm typecheck`: strict TypeScript.
 - `pnpm test`: domain rules (workflow, permissions, dependencies, review history, conflict checks).
-- `node scripts/contracts.mjs`: real HTTP + stdio MCP against an isolated server. Configure TEST_URL, TEST_EMAIL, TEST_PASSWORD, SETUP_TOKEN. Creates test users, projects, images and credentials; never point it at real data.
+- `node scripts/contracts.mjs`: real HTTP + stdio MCP against an isolated server. Configure TEST_URL, TEST_EMAIL, TEST_PASSWORD. Creates test users, projects, images and credentials; never point it at real data.
 - `pnpm test:e2e`: browser scenarios against a separate seeded demo. Configure TEST_URL and DEMO_PASSWORD. Tests desktop task creation/progress/review, canvas save/undo/redo, 360 px review with reduced motion, pins and image version history.
 - `node scripts/accessibility.mjs`: rendered axe WCAG A/AA checks; adjust local demo settings in script if needed. It records the exact audited views, not a universal accessibility claim.
 - `pnpm build` / `pnpm cf:build`: standard Next.js and adapter builds. Avoid running builds concurrently; they share `.next`.
@@ -48,9 +50,9 @@ See [VERIFICATION.md](VERIFICATION.md) for actual results, measurements and unte
 ## Docker deployment
 
 1. Install Docker Engine/Compose on your host.
-2. Copy `.env.example` to `.env`; choose random BETTER_AUTH_SECRET/SETUP_TOKEN values and your exact HTTPS APP_URL.
+2. Copy `.env.example` to `.env`; choose a random BETTER_AUTH_SECRET and set your exact HTTPS APP_URL.
 3. Run `docker compose up --build -d`. The service binds host loopback:3000. Put a TLS reverse proxy in front for remote access.
-4. Open the public URL and create the first owner. Copy the setup token privately; remove it from operational access once setup is complete (the installation remains closed regardless).
+4. Open the public URL and create the first owner with a username and password. Successful registration closes setup.
 5. Keep the `backlog-data` named volume. It holds the SQLite database, WAL files, and uploads. `docker compose down` retains it; **never** use `down -v` unless intentionally deleting your installation.
 6. Validate persistence: create an In progress task and an uploaded image, run `docker compose restart`, sign in again, and confirm both survive. This exact container restart test is provided as an operational check but was not run here because Docker is unavailable.
 
@@ -58,7 +60,7 @@ The runtime image runs as the non-root `node` user. Database migrations are copi
 
 ## Cloudflare deployment
 
-Prepared and **locally tested**, not deployed live. Requires a Cloudflare account, a D1 database and R2 bucket. Recommend Workers Paid for password-authenticated usage (see hosting limits below).
+Requires a Cloudflare account, a D1 database and R2 bucket. The current installation was deployed and smoke-tested on 2026-09-22; account quota/billing validation remains an operator responsibility. Recommend Workers Paid for password-authenticated usage (see hosting limits below).
 
 ```sh
 pnpm exec wrangler login
@@ -70,13 +72,12 @@ Put your returned D1 ID in `wrangler.jsonc`, set bucket name and production APP_
 
 ```sh
 pnpm exec wrangler secret put BETTER_AUTH_SECRET
-pnpm exec wrangler secret put SETUP_TOKEN
 pnpm exec wrangler d1 migrations apply custombacklog --remote
 pnpm cf:build
 pnpm exec opennextjs-cloudflare deploy
 ```
 
-For local emulation, create ignored `.dev.vars` with the two secrets, leave local APP_URL as `http://localhost:8787`, then:
+For local emulation, create ignored `.dev.vars` with BETTER_AUTH_SECRET, leave local APP_URL as `http://localhost:8787`, then:
 
 ```sh
 pnpm cf:migrate

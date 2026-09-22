@@ -14,9 +14,7 @@ await page.getByLabel("Username").fill("onboarding-owner");
 await page
   .getByLabel("Password", { exact: true })
   .fill("onboarding-password-2026");
-await page
-  .getByLabel("Installation setup token")
-  .fill("onboarding-test-setup-token");
+await expect(page.locator(".auth-form input")).toHaveCount(2);
 await page.getByRole("button", { name: "Create owner account" }).click();
 await page
   .getByRole("button", { name: "Create a project", exact: true })

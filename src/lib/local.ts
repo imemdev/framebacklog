@@ -62,3 +62,11 @@ export async function getLocal(key: string) {
     await readFile(resolve(process.env.DATA_DIR || ".data", "uploads", key)),
   );
 }
+export async function deleteLocal(key: string) {
+  const { unlink } = await import("node:fs/promises");
+  try {
+    await unlink(resolve(process.env.DATA_DIR || ".data", "uploads", key));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+}

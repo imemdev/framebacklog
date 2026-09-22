@@ -3,13 +3,16 @@
 - [x] 1. Foundation: Next.js/OpenNext compatibility verified; Better Auth; SQLite/D1 adapters; protected uploads; both builds and local runtime slices passed before UI work.
 - [x] 2. Design system: light shell, desktop/mobile navigation, Radix dialogs, purposeful reduced-motion-aware transitions, loading/error/empty/offline/permission states; explicit separate demo.
 - [x] 3. Backlog: persistent board/list tasks, filters, shareable details, requirements/progress, dependencies, comments, activity, completion and concurrency rules.
-- [x] 4. Journey: named journeys, placeholders/private raster uploads, immutable versions, persisted React Flow layout/connections, undo/redo, explicit Arrange, screen list/focused review, pins/replies/resolution and linked tasks.
+- [x] 4. Journey: named journeys, private raster uploads, editable Version 1 placeholders, version stacks, persisted React Flow layout/connections, undo/redo, explicit Arrange, screen list/focused review, pins/replies/resolution and linked tasks.
 - [x] 5. Human review: task/screen queues; owner-only Done reviewed; mandatory change feedback; historical reviews retained; AI human-review attempts rejected.
 - [x] 6. API and MCP: versioned REST, generated OpenAPI, bounded deterministic context/pages/batches/cursors, idempotency, scoped credentials, connection test/kit, local stdio adapter verified through REST.
 - [x] 7. Portability/hardening implemented: Docker configuration, D1/R2 bindings/migrations, versioned export/import, request/upload limits, private no-store responses, CSRF and authorization, backup/restore instructions.
 - [x] 8. Local end-to-end verification/polish: strict typing, 6 domain tests, 25 API/MCP checks per backend, 6 desktop/phone browser scenarios, 7 audited views with no detected WCAG A/AA violations; measured request/payload/CPU evidence.
 - [ ] Docker container execution and volume restart verification: Docker is not installed on this host. Configuration and exact validation instructions are provided.
-- [ ] Live Cloudflare deployment and account quota/billing validation: no live deployment performed. Local Workers/D1/R2 preview passed.
+- [x] Live Cloudflare deployment: version `3070ad42-78f4-4849-9257-72daeedda75b` is serving `https://custombacklog.medimemhamdi18.workers.dev`; root and OpenAPI read-only smoke checks returned HTTP 200. Account quota/billing validation remains outstanding.
+- [x] Local development launcher: loads `.env.local` for SQLite migration, starts the Next.js dev server, opens the app when ready, and cleans up its owned process tree on exit. Isolated startup/shutdown evidence is in [verification](docs/VERIFICATION.md).
+- [x] Owner onboarding accepts a username and password directly in every environment. The first successful registration atomically closes setup; the dev server continues to bind to loopback.
+- [x] Optional private local-owner credentials are applied by the launcher before startup. Existing owner identity and projects are retained; unchanged credentials preserve sessions. Eight isolated provisioning tests and real owner sign-in passed.
 
 ## Key decisions
 
@@ -34,6 +37,13 @@ Workers Free has a documented 10 ms CPU budget. Password hashing/sign-in exceede
 - [x] Layered version stacks in canvas and screen list; thumbnail carousel with previous/next controls and version-specific discussion.
 - [x] Human-only persistent recommendations, green action, preferred version shown first, optimistic conflicts and activity records.
 - [x] Export/import retains and validates recommendations. Seven unit tests, both builds, desktop/phone browser flow passed.
+
+## Screen image and screen CRUD
+
+- [x] Add screen accepts an optional first screenshot, so an uploaded screen starts with an image on Version 1 instead of an empty Version 2.
+- [x] Existing versions expose upload, replace, and remove image actions with an optimistic image revision and the existing upload permission.
+- [x] Screen title rename and screen deletion are available in the screen panel; deletion removes journey nodes/edges, task/comment references, and private image objects after the aggregate write succeeds.
+- [x] Focused Node/SQLite API and Chromium checks covered multipart Version 1 creation, placeholder add/replace/remove, rename/delete cleanup, protected image retrieval, and partner-safe server authorization.
 
 ## Pinned feedback, portrait screens, and task cleanup
 
@@ -70,6 +80,7 @@ Workers Free has a documented 10 ms CPU budget. Password hashing/sign-in exceede
 
 - [x] Run journey from canvas or screen-list toolbar; focused responsive player uses the recommended screen version.
 - [x] Automatic directed traversal, explicit branch/start choices, pause/resume/restart and 0.5×/0.75×/1×/1.25× speeds.
+- [x] Normal 1× playback is one second per screen; the visible status uses the same timing calculation.
 - [x] End-of-path feedback, explicit loop continuation, background-tab pause and timer cleanup on close.
 - [x] Browser verification of timings, both branch choices, pause/resume, end/restart, phone and reduced-motion mode.
 
@@ -78,6 +89,7 @@ Workers Free has a documented 10 ms CPU budget. Password hashing/sign-in exceede
 - [x] Rounded orthogonal routing around screen bounds for forward, return, skipped-screen and cross-row links.
 - [x] Distinct outer lanes, bordered labels, clearer arrowheads and 28px interaction paths.
 - [x] More initial canvas padding; existing connections and confirmation/undo workflow retained.
+- [x] Connection creation shows an explicit From → To preview, explains that the arrow points to the destination, and offers a one-click direction swap for existing or new connections.
 - [x] 14 tests pass; isolated browser verified return/shortcut routes, click confirmation, refresh, desktop and phone screenshots.
 
 ## Public guide and open-source publication
